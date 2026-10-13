@@ -1,0 +1,8 @@
+{% extends 'base.html' %}{% block content %}
+<h1>📣 Comunicados</h1><p class="muted">Mural de notícias e informações da escola.</p>
+{% for n in notices %}<article class="card notice-card">
+{% if n.image_file %}<img class="notice-cover" src="{{url_for('notice_image',nid=n.id)}}" alt="Imagem do comunicado {{n.title}}" loading="lazy">{% endif %}
+<p class="muted">{% if n.pinned %}📌 Fixado • {% endif %}{{n.category_name or n.kind}} • {{n.created_at[:10]}}</p>
+<h2>{{n.title}}</h2><p style="white-space:pre-wrap">{{n.body}}</p>
+{% if n.attachment_file %}<p><a class="btn" href="{{url_for('notice_attachment',nid=n.id)}}" target="_blank" rel="noopener">👁 Ver PDF</a> <a class="btn" href="{{url_for('notice_attachment',nid=n.id,baixar=1)}}">⬇ Baixar PDF</a></p>{% endif %}
+</article>{% else %}<div class="card">Nenhum comunicado publicado.</div>{% endfor %}{% endblock %}

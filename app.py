@@ -1,5 +1,7 @@
-import os, sqlite3, secrets, click
-from datetime import date
+import os, sqlite3, secrets, click, uuid, io
+from werkzeug.utils import secure_filename
+from flask import send_file
+from datetime import date, datetime
 from functools import wraps
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, g
@@ -10,10 +12,11 @@ from flask_limiter.util import get_remote_address
 
 ROOT=Path(__file__).resolve().parent
 app=Flask(__name__)
-app.config.update(SECRET_KEY=os.environ.get('SECRET_KEY') or secrets.token_hex(32),SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE','0')=='1',MAX_CONTENT_LENGTH=2*1024*1024)
+app.config.update(SECRET_KEY=os.environ.get('SECRET_KEY') or secrets.token_hex(32),SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE','0')=='1',MAX_CONTENT_LENGTH=12*1024*1024)
 csrf=CSRFProtect(app)
 limiter=Limiter(get_remote_address,app=app,default_limits=[])
 DB=os.getenv('DATABASE_PATH',str(ROOT/'cen.sqlite3'))
+UPLOAD_ROOT=Path(os.getenv('UPLOAD_ROOT',str(ROOT/'private_uploads'))).resolve()
 
 def db():
     if 'db' not in g:
@@ -23,6 +26,70 @@ def db():
 def close(_):
     c=g.pop('db',None)
     if c:c.close()
+
+def migrate_portal():
+    """Migração aditiva; preserva tabelas e registros existentes."""
+    conn=db()
+    cols={r['name'] for r in conn.execute('PRAGMA table_info(messages)')}
+    if 'subject' not in cols:conn.execute("ALTER TABLE messages ADD COLUMN subject TEXT NOT NULL DEFAULT 'Mensagem da escola'")
+    conn.executescript("""CREATE TABLE IF NOT EXISTS message_reads(message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(message_id,user_id));
+    CREATE TABLE IF NOT EXISTS event_categories(id INTEGER PRIMARY KEY,name TEXT NOT NULL UNIQUE,color TEXT NOT NULL DEFAULT '#397f85',active INTEGER NOT NULL DEFAULT 1);
+    """)
+    for name,color in [('Feriados','#d65a5a'),('Reuniões','#e5a33b'),('Avaliações','#9465bf'),('Recessos','#339b75'),('Eventos escolares','#397fc5'),('Treinamentos','#cc79a8'),('Sábados letivos','#168b99')]:
+        conn.execute('INSERT OR IGNORE INTO event_categories(name,color) VALUES(?,?)',(name,color))
+    cols={r['name'] for r in conn.execute('PRAGMA table_info(events)')}
+    if 'category_id' not in cols:conn.execute('ALTER TABLE events ADD COLUMN category_id INTEGER REFERENCES event_categories(id)')
+    cols={r['name'] for r in conn.execute('PRAGMA table_info(students)')}
+    for field in ('photo_file','card_pdf_file','card_preview_file'):
+        if field not in cols:conn.execute(f'ALTER TABLE students ADD COLUMN {field} TEXT')
+    conn.execute("CREATE TABLE IF NOT EXISTS portal_settings(key TEXT PRIMARY KEY, filename TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS report_subjects(id INTEGER PRIMARY KEY, school_year INTEGER NOT NULL, segment TEXT NOT NULL CHECK(segment IN ('F2','EM')), class_name TEXT NOT NULL DEFAULT '*', name TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, UNIQUE(school_year,segment,class_name,name));
+    CREATE TABLE IF NOT EXISTS report_concepts(id INTEGER PRIMARY KEY, student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,school_year INTEGER NOT NULL,subject_id INTEGER NOT NULL REFERENCES report_subjects(id),term INTEGER NOT NULL CHECK(term BETWEEN 1 AND 3),co TEXT NOT NULL DEFAULT '',at TEXT NOT NULL DEFAULT '',ha TEXT NOT NULL DEFAULT '',re TEXT NOT NULL DEFAULT '',fa INTEGER NOT NULL DEFAULT 0 CHECK(fa>=0),UNIQUE(student_id,school_year,subject_id,term));
+    CREATE TABLE IF NOT EXISTS report_finals(student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,school_year INTEGER NOT NULL,subject_id INTEGER NOT NULL REFERENCES report_subjects(id),tf INTEGER NOT NULL DEFAULT 0 CHECK(tf>=0),cf TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',PRIMARY KEY(student_id,school_year,subject_id));
+    CREATE TABLE IF NOT EXISTS report_descriptions(student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,school_year INTEGER NOT NULL,term INTEGER NOT NULL CHECK(term BETWEEN 1 AND 3),body TEXT NOT NULL DEFAULT '',PRIMARY KEY(student_id,school_year,term));
+    CREATE TABLE IF NOT EXISTS report_publications(student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,school_year INTEGER NOT NULL,term INTEGER NOT NULL CHECK(term BETWEEN 1 AND 3),published INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(student_id,school_year,term));
+    """)
+    cols={r['name'] for r in conn.execute('PRAGMA table_info(payments)')}
+    for field,definition in [('reference_year','INTEGER'),('reference_month','INTEGER'),('boleto_file','TEXT'),('paid_at','TEXT')]:
+        if field not in cols:conn.execute(f'ALTER TABLE payments ADD COLUMN {field} {definition}')
+    conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS ux_payments_student_month ON payments(student_id,reference_year,reference_month) WHERE reference_year IS NOT NULL AND reference_month IS NOT NULL')
+    cols={r['name'] for r in conn.execute('PRAGMA table_info(notices)')}
+    for field,definition in [('image_file','TEXT'),('attachment_file','TEXT'),('pinned','INTEGER NOT NULL DEFAULT 0'),('published','INTEGER NOT NULL DEFAULT 1'),('archived','INTEGER NOT NULL DEFAULT 0')]:
+        if field not in cols:conn.execute(f'ALTER TABLE notices ADD COLUMN {field} {definition}')
+    conn.execute('CREATE TABLE IF NOT EXISTS notice_categories(id INTEGER PRIMARY KEY,name TEXT NOT NULL UNIQUE,active INTEGER NOT NULL DEFAULT 1)')
+    cols={r['name'] for r in conn.execute('PRAGMA table_info(notices)')}
+    if 'notice_category_id' not in cols:conn.execute('ALTER TABLE notices ADD COLUMN notice_category_id INTEGER REFERENCES notice_categories(id)')
+    for name in ('Avisos importantes','Eventos','Projetos','Informações gerais','Notícias do CEN'):
+        conn.execute('INSERT OR IGNORE INTO notice_categories(name) VALUES(?)',(name,))
+    cols={r['name'] for r in conn.execute('PRAGMA table_info(events)')}
+    if 'end_date' not in cols:conn.execute('ALTER TABLE events ADD COLUMN end_date TEXT')
+    conn.commit()
+
+def store_upload(file, kind):
+    if not file or not file.filename:abort(400)
+    raw=file.read()
+    if kind=='pdf':
+        if not raw.startswith(b'%PDF-'):abort(400,'Envie um PDF válido.')
+        ext='.pdf'
+    else:
+        from PIL import Image, UnidentifiedImageError
+        try:
+            im=Image.open(io.BytesIO(raw));im.verify()
+            im=Image.open(io.BytesIO(raw));im.thumbnail((1600,1600))
+            out=io.BytesIO();im.convert('RGB').save(out,format='JPEG',quality=88);raw=out.getvalue()
+        except (UnidentifiedImageError,OSError,ValueError):abort(400,'Imagem inválida.')
+        ext='.jpg'
+    folder=UPLOAD_ROOT/kind;folder.mkdir(parents=True,exist_ok=True)
+    filename=uuid.uuid4().hex+ext
+    (folder/filename).write_bytes(raw)
+    return filename
+
+def private_file(kind,filename):
+    if not filename or '/' in filename or '\\' in filename:abort(404)
+    path=UPLOAD_ROOT/kind/filename
+    if not path.is_file():abort(404)
+    return send_file(path, mimetype='application/pdf' if kind=='pdf' else 'image/jpeg',as_attachment=False)
 
 def init_db():
     with app.app_context():
@@ -37,6 +104,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY,student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,sender_id INTEGER NOT NULL REFERENCES users(id),body TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,actor_id INTEGER NOT NULL,action TEXT NOT NULL,entity TEXT NOT NULL,entity_id INTEGER,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
         ''');db().commit()
+        migrate_portal()
 
 @app.cli.command('init-db')
 def init_command():
@@ -56,8 +124,8 @@ def current_user():
 @app.context_processor
 def context():
     me = current_user()
-    return {'me': me, 'today': date.today().isoformat(),
-            'nav_students': allowed_students() if me and me['role'] == 'responsavel' else []}
+    return {'me': me, 'today': date.today().isoformat(), 'selected_student_id':session.get('selected_student_id'),
+            'nav_students': allowed_students() if me and me['role'] == 'responsavel' else [], 'unread_count': unread_count() if me and me['role']=='responsavel' else 0}
 def login_required(fn):
     @wraps(fn)
     def inner(*a,**kw):
@@ -75,6 +143,9 @@ def admin_required(fn):
 def allowed_students():
     if current_user()['role']=='admin':return db().execute('SELECT * FROM students ORDER BY name').fetchall()
     return db().execute('SELECT s.* FROM students s JOIN guardians g ON g.student_id=s.id WHERE g.user_id=? AND s.active=1 ORDER BY s.name',(session['uid'],)).fetchall()
+def unread_count():
+    return db().execute("SELECT COUNT(*) FROM messages m JOIN guardians g ON g.student_id=m.student_id AND g.user_id=? LEFT JOIN message_reads r ON r.message_id=m.id AND r.user_id=? WHERE r.message_id IS NULL AND m.sender_id IN (SELECT id FROM users WHERE role='admin')",(session['uid'],session['uid'])).fetchone()[0]
+
 def check_student(sid):
     s=db().execute('SELECT * FROM students WHERE id=?',(sid,)).fetchone()
     if not s:abort(404)
@@ -89,7 +160,74 @@ def number(key):
 @app.get('/')
 def home():
     if not current_user():return redirect(url_for('login'))
-    return render_template('home.html',students=allowed_students(),notices=db().execute('SELECT * FROM notices ORDER BY id DESC LIMIT 4').fetchall())
+    students=allowed_students()
+    requested=request.args.get('aluno',type=int)
+    if requested is not None:
+        if not any(st['id']==requested for st in students):abort(403)
+        session['selected_student_id']=requested
+    selected=next((st for st in students if st['id']==session.get('selected_student_id')),students[0] if students else None)
+    if selected:session['selected_student_id']=selected['id']
+    banner=db().execute("SELECT filename FROM portal_settings WHERE key='home_banner'").fetchone()
+    return render_template('home.html',students=students,selected=selected,banner=banner['filename'] if banner else None)
+@app.get('/aluno/<int:sid>/foto')
+@login_required
+def student_photo(sid):
+    st=check_student(sid);return private_file('image',st['photo_file'])
+
+@app.get('/aluno/<int:sid>/carteirinha')
+@login_required
+def student_card(sid):
+    st=check_student(sid);return private_file('pdf',st['card_pdf_file'])
+
+@app.get('/aluno/<int:sid>/carteirinha/miniatura')
+@login_required
+def student_card_preview(sid):
+    st=check_student(sid);return private_file('image',st['card_preview_file'])
+
+@app.get('/inicio/banner')
+@login_required
+def home_banner():
+    row=db().execute("SELECT filename FROM portal_settings WHERE key='home_banner'").fetchone()
+    return private_file('image',row['filename'] if row else None)
+
+@app.post('/admin/aluno/<int:sid>/foto')
+@admin_required
+def upload_student_photo(sid):
+    check_student(sid);name=store_upload(request.files.get('file'),'image')
+    db().execute('UPDATE students SET photo_file=? WHERE id=?',(name,sid));audit('foto','aluno',sid);db().commit()
+    flash('Foto atualizada.','success');return redirect(url_for('student',sid=sid))
+
+@app.post('/admin/aluno/<int:sid>/carteirinha')
+@admin_required
+def upload_student_card(sid):
+    check_student(sid);pdf=request.files.get('file')
+    name=store_upload(pdf,'pdf')
+    try:
+        import fitz
+        doc=fitz.open(UPLOAD_ROOT/'pdf'/name)
+        if len(doc)<1:raise ValueError('PDF sem páginas')
+        pix=doc[0].get_pixmap(matrix=fitz.Matrix(1.1,1.1),alpha=False)
+        from PIL import Image
+        im=Image.open(io.BytesIO(pix.tobytes('png')));out=io.BytesIO();im.convert('RGB').save(out,format='JPEG',quality=84)
+        folder=UPLOAD_ROOT/'image';folder.mkdir(parents=True,exist_ok=True)
+        preview=uuid.uuid4().hex+'.jpg';(folder/preview).write_bytes(out.getvalue())
+        doc.close()
+    except Exception:
+        (UPLOAD_ROOT/'pdf'/name).unlink(missing_ok=True)
+        flash('Não foi possível gerar a miniatura. Verifique o PDF.','error')
+        return redirect(url_for('student',sid=sid))
+    db().execute('UPDATE students SET card_pdf_file=?,card_preview_file=? WHERE id=?',(name,preview,sid))
+    audit('carteirinha','aluno',sid);db().commit()
+    flash('Carteirinha atualizada.','success');return redirect(url_for('student',sid=sid))
+
+@app.post('/admin/inicio/banner')
+@admin_required
+def upload_home_banner():
+    name=store_upload(request.files.get('file'),'image')
+    db().execute("INSERT INTO portal_settings(key,filename) VALUES('home_banner',?) ON CONFLICT(key) DO UPDATE SET filename=excluded.filename,updated_at=CURRENT_TIMESTAMP",(name,))
+    audit('banner','portal',None);db().commit()
+    flash('Banner atualizado.','success');return redirect(url_for('admin')+'#banner')
+
 @app.route('/login',methods=['GET','POST'])
 @limiter.limit('8 per minute',methods=['POST'])
 def login():
@@ -107,21 +245,194 @@ def logout():session.clear();return redirect(url_for('login'))
 def student(sid):
     s=check_student(sid)
     return render_template('student.html',s=s,grades=db().execute('SELECT * FROM grades WHERE student_id=? ORDER BY subject,term',(sid,)).fetchall(),payments=db().execute('SELECT * FROM payments WHERE student_id=? ORDER BY due_date DESC',(sid,)).fetchall(),messages=db().execute('SELECT m.*,u.name sender FROM messages m JOIN users u ON u.id=m.sender_id WHERE student_id=? ORDER BY m.id',(sid,)).fetchall())
+CONCEPTS=('','MB','B','R','S','I')
+DEFAULT_SUBJECTS={
+ 'F2':['Língua Portuguesa e Produções Textuais','Redação','Artes e Modernidades','Música e Habilidades Socioemocionais','Inglês','Educação Física','Geografia','História','Ciências','Matemática'],
+ 'EM':['Português','Redação','Literatura','Artes','Inglês','Espanhol','Educação Física','Geografia','História','Biologia','Física','Química','Filosofia','Sociologia','Matemática','Itinerários Formativos']}
+
+def report_segment(level):
+    import unicodedata
+    x=''.join(c for c in unicodedata.normalize('NFKD',level.lower()) if not unicodedata.combining(c))
+    if 'medio' in x or x.strip() in ('em','ensino medio'):return 'EM'
+    if 'fundamental ii' in x or 'fundamental 2' in x or 'fundamental 6' in x or x.strip() in ('f2','fund ii') or any(f'{i}º' in x or f'{i}o ano' in x for i in range(6,10)):return 'F2'
+    return 'F1'
+
+def report_year():
+    y=request.args.get('ano',str(date.today().year))
+    try:y=int(y)
+    except ValueError:abort(400)
+    if y<2000 or y>2100:abort(400)
+    return y
+
+def ensure_subjects(year,segment):
+    if segment=='F1':return
+    if not db().execute('SELECT 1 FROM report_subjects WHERE school_year=? AND segment=?',(year,segment)).fetchone():
+        for i,name in enumerate(DEFAULT_SUBJECTS[segment]):
+            db().execute('INSERT OR IGNORE INTO report_subjects(school_year,segment,class_name,name,position) VALUES(?,?,?,?,?)',(year,segment,'*',name,i))
+        db().commit()
+
+def report_subject_list(year,segment,student):
+    ensure_subjects(year,segment)
+    return db().execute("SELECT * FROM report_subjects WHERE school_year=? AND segment=? AND (class_name=? OR class_name='*') ORDER BY CASE WHEN class_name=? THEN 0 ELSE 1 END,position,id",(year,segment,student['class_name'],student['class_name'])).fetchall()
+
+@app.get('/aluno/<int:sid>/boletim')
+@login_required
+def boletim(sid):
+    st=check_student(sid);year=report_year();segment=report_segment(st['grade_level']);admin_mode=current_user()['role']=='admin'
+    subjects=report_subject_list(year,segment,st) if segment!='F1' else []
+    visible={r['term'] for r in db().execute('SELECT term FROM report_publications WHERE student_id=? AND school_year=? AND published=1',(sid,year))}
+    published=set(visible)
+    if admin_mode:visible={1,2,3}
+    concept_rows=db().execute('SELECT * FROM report_concepts WHERE student_id=? AND school_year=?',(sid,year)).fetchall()
+    concepts={(r['subject_id'],r['term']):r for r in concept_rows if r['term'] in visible}
+    finals={r['subject_id']:r for r in db().execute('SELECT * FROM report_finals WHERE student_id=? AND school_year=?',(sid,year))} if 3 in visible else {}
+    descriptions={r['term']:r['body'] for r in db().execute('SELECT * FROM report_descriptions WHERE student_id=? AND school_year=?',(sid,year)) if r['term'] in visible}
+    return render_template('boletim.html',s=st,year=year,segment=segment,subjects=subjects,concepts=concepts,finals=finals,descriptions=descriptions,visible=visible,published=published,admin_mode=admin_mode,choices=CONCEPTS)
+
+@app.post('/admin/boletim/<int:sid>/conceito')
+@admin_required
+def save_concept(sid):
+    st=check_student(sid);year=number('year');term=number('term');subject_id=number('subject_id')
+    if term not in (1,2,3) or not 2000<=year<=2100:abort(400)
+    segment=report_segment(st['grade_level'])
+    subject=db().execute("SELECT 1 FROM report_subjects WHERE id=? AND school_year=? AND segment=? AND active=1 AND (class_name=? OR class_name='*')",(subject_id,year,segment,st['class_name'])).fetchone()
+    if not subject:abort(400)
+    vals=[value(k,2).upper() for k in ('co','at','ha','re')]
+    if any(v not in CONCEPTS for v in vals):abort(400)
+    fa=number('fa')
+    if fa<0:abort(400)
+    db().execute('INSERT INTO report_concepts(student_id,school_year,subject_id,term,co,at,ha,re,fa) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(student_id,school_year,subject_id,term) DO UPDATE SET co=excluded.co,at=excluded.at,ha=excluded.ha,re=excluded.re,fa=excluded.fa',(sid,year,subject_id,term,*vals,fa))
+    audit('conceitos','boletim',sid);db().commit()
+    return redirect(url_for('boletim',sid=sid,ano=year))
+
+@app.post('/admin/boletim/<int:sid>/final')
+@admin_required
+def save_final(sid):
+    st=check_student(sid);year=number('year');subject_id=number('subject_id');tf=number('tf');cf=value('cf',2).upper();result=value('result',100)
+    if not 2000<=year<=2100 or tf<0 or cf not in CONCEPTS:abort(400)
+    if not db().execute("SELECT 1 FROM report_subjects WHERE id=? AND school_year=? AND segment=? AND (class_name=? OR class_name='*')",(subject_id,year,report_segment(st['grade_level']),st['class_name'])).fetchone():abort(400)
+    db().execute('INSERT INTO report_finals(student_id,school_year,subject_id,tf,cf,result) VALUES(?,?,?,?,?,?) ON CONFLICT(student_id,school_year,subject_id) DO UPDATE SET tf=excluded.tf,cf=excluded.cf,result=excluded.result',(sid,year,subject_id,tf,cf,result))
+    audit('resultado','boletim',sid);db().commit();return redirect(url_for('boletim',sid=sid,ano=year))
+
+@app.post('/admin/boletim/<int:sid>/relatorio')
+@admin_required
+def save_description(sid):
+    st=check_student(sid)
+    if report_segment(st['grade_level'])!='F1':abort(400)
+    year=number('year');term=number('term')
+    if not 2000<=year<=2100 or term not in (1,2,3):abort(400)
+    db().execute('INSERT INTO report_descriptions(student_id,school_year,term,body) VALUES(?,?,?,?) ON CONFLICT(student_id,school_year,term) DO UPDATE SET body=excluded.body',(sid,year,term,value('body',20000)))
+    audit('relatorio','boletim',sid);db().commit();return redirect(url_for('boletim',sid=sid,ano=year))
+
+@app.post('/admin/boletim/<int:sid>/publicar')
+@admin_required
+def publish_report(sid):
+    check_student(sid);year=number('year');term=number('term');published=number('published')
+    if not 2000<=year<=2100 or term not in (1,2,3) or published not in (0,1):abort(400)
+    db().execute('INSERT INTO report_publications(student_id,school_year,term,published) VALUES(?,?,?,?) ON CONFLICT(student_id,school_year,term) DO UPDATE SET published=excluded.published',(sid,year,term,published))
+    audit('publicar' if published else 'ocultar','boletim',sid);db().commit();return redirect(url_for('boletim',sid=sid,ano=year))
+
+@app.post('/admin/disciplinas')
+@admin_required
+def add_report_subject():
+    year=number('year');segment=value('segment');name=value('name',150);class_name=value('class_name',100) or '*';position=number('position')
+    if not 2000<=year<=2100 or segment not in ('F2','EM') or not name or position<0:abort(400)
+    ensure_subjects(year,segment)
+    db().execute('INSERT INTO report_subjects(school_year,segment,class_name,name,position) VALUES(?,?,?,?,?)',(year,segment,class_name,name,position))
+    audit('criar','disciplina',None);db().commit();return redirect(url_for('admin')+'#disciplinas')
+
+@app.post('/admin/disciplinas/<int:subject_id>')
+@admin_required
+def edit_report_subject(subject_id):
+    name=value('name',150);position=number('position');active=number('active')
+    if not name or position<0 or active not in (0,1):abort(400)
+    row=db().execute('SELECT id FROM report_subjects WHERE id=?',(subject_id,)).fetchone()
+    if not row:abort(404)
+    db().execute('UPDATE report_subjects SET name=?,position=?,active=? WHERE id=?',(name,position,active,subject_id))
+    audit('editar','disciplina',subject_id);db().commit();return redirect(url_for('admin')+'#disciplinas')
+
+@app.get('/aluno/<int:sid>/financeiro')
+@login_required
+def financeiro(sid):
+    student=check_student(sid)
+    year=request.args.get('ano',default=date.today().year,type=int)
+    if not 2000<=year<=2100:abort(400)
+    rows=db().execute('SELECT * FROM payments WHERE student_id=? AND reference_year=? ORDER BY reference_month',(sid,year)).fetchall()
+    by_month={r['reference_month']:r for r in rows}
+    months=[]
+    for m in range(1,13):
+        payment=by_month.get(m)
+        status='Sem boleto'
+        if payment:
+            if payment['status']=='Pago':status='Pago'
+            elif payment['due_date']<date.today().isoformat():status='Vencido'
+            elif payment['status']=='Vencido':status='Em atraso'
+            else:status='Em aberto'
+        months.append({'month':m,'name':('Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro')[m-1],'payment':payment,'status':status})
+    legacy=db().execute('SELECT * FROM payments WHERE student_id=? AND reference_year IS NULL AND substr(due_date,1,4)=? ORDER BY due_date',(sid,str(year))).fetchall()
+    return render_template('financeiro.html',s=student,months=months,legacy=legacy,year=year)
+
+@app.get('/aluno/<int:sid>/boleto/<int:pid>')
+@login_required
+def view_boleto(sid,pid):
+    check_student(sid)
+    payment=db().execute('SELECT boleto_file FROM payments WHERE id=? AND student_id=?',(pid,sid)).fetchone()
+    if not payment or not payment['boleto_file']:abort(404)
+    response=private_file('pdf',payment['boleto_file'])
+    response.headers['Cache-Control']='private, no-store'
+    response.headers['X-Content-Type-Options']='nosniff'
+    response.headers['Content-Disposition']=(('attachment' if request.args.get('baixar')=='1' else 'inline')+'; filename="boleto.pdf"')
+    return response
+
+@app.get('/aluno/<int:sid>/mensagens')
+@login_required
+def mensagens(sid):
+    student=check_student(sid)
+    items=db().execute("SELECT m.* FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.student_id=? AND u.role='admin' ORDER BY m.created_at DESC,m.id DESC",(sid,)).fetchall()
+    return render_template('mensagens.html',s=student,messages=items)
+
+@app.post('/aluno/<int:sid>/mensagens/<int:mid>/ler')
+@login_required
+def read_message(sid,mid):
+    check_student(sid)
+    if not db().execute("SELECT 1 FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=? AND m.student_id=? AND u.role='admin'",(mid,sid)).fetchone():abort(404)
+    db().execute('INSERT OR IGNORE INTO message_reads(message_id,user_id) VALUES(?,?)',(mid,session['uid']))
+    db().commit()
+    return redirect(url_for('mensagens',sid=sid)+'#msg-'+str(mid))
+
 @app.post('/aluno/<int:sid>/mensagem')
 @login_required
 @limiter.limit('20 per hour')
 def send_message(sid):
-    check_student(sid);body=value('body',2000)
-    if body:
-        db().execute('INSERT INTO messages(student_id,sender_id,body) VALUES(?,?,?)',(sid,session['uid'],body));db().commit()
-    return redirect(url_for('student',sid=sid)+'#mensagens')
+    check_student(sid)
+    if current_user()['role']!='admin':abort(403)
+    body=value('body',2000);subject=value('subject',200)
+    if body and subject:
+        cur=db().execute('INSERT INTO messages(student_id,sender_id,subject,body) VALUES(?,?,?,?)',(sid,session['uid'],subject,body));audit('enviar','mensagem',cur.lastrowid);db().commit()
+    return redirect(url_for('mensagens',sid=sid))
 @app.get('/mural')
 @login_required
 def mural():return render_template('mural.html',notices=db().execute('SELECT * FROM notices ORDER BY id DESC').fetchall(),events=db().execute('SELECT * FROM events ORDER BY event_date DESC').fetchall())
+@app.get('/calendario')
+@login_required
+def calendario():
+    try:year=int(request.args.get('ano',date.today().year));month=int(request.args.get('mes',date.today().month))
+    except ValueError:abort(400)
+    if year<2000 or year>2100 or month not in range(1,13):abort(400)
+    import calendar as cal
+    entries=db().execute('SELECT e.*,c.name category,c.color FROM events e LEFT JOIN event_categories c ON c.id=e.category_id WHERE e.event_date<=? AND COALESCE(e.end_date,e.event_date)>=? ORDER BY e.event_date,e.id',(f'{year:04d}-{month:02d}-{cal.monthrange(year,month)[1]:02d}',f'{year:04d}-{month:02d}-01')).fetchall()
+    categories=db().execute('SELECT * FROM event_categories WHERE active=1 ORDER BY name').fetchall()
+    return render_template('calendario.html',year=year,month=month,month_name=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][month],weeks=cal.Calendar(firstweekday=6).monthdayscalendar(year,month),events=entries,categories=categories)
+
+@app.get('/comunicados')
+@login_required
+def comunicados():
+    return render_template('comunicados.html',notices=db().execute('SELECT n.*,c.name category_name FROM notices n LEFT JOIN notice_categories c ON c.id=n.notice_category_id WHERE n.published=1 AND n.archived=0 ORDER BY n.pinned DESC,n.created_at DESC,n.id DESC').fetchall())
+
 @app.get('/admin')
 @admin_required
 def admin():
-    return render_template('admin.html',students=allowed_students(),guardians=db().execute("SELECT * FROM users WHERE role='responsavel' ORDER BY name").fetchall(),notices=db().execute('SELECT * FROM notices ORDER BY id DESC').fetchall(),events=db().execute('SELECT * FROM events ORDER BY event_date DESC').fetchall())
+    return render_template('admin.html',students=allowed_students(),guardians=db().execute("SELECT * FROM users WHERE role='responsavel' ORDER BY name").fetchall(),notices=db().execute('SELECT * FROM notices ORDER BY id DESC').fetchall(),events=db().execute('SELECT * FROM events ORDER BY event_date DESC').fetchall(),categories=db().execute('SELECT * FROM event_categories ORDER BY name').fetchall(),report_subjects=db().execute('SELECT * FROM report_subjects ORDER BY school_year DESC,segment,class_name,position').fetchall(),notice_categories=db().execute('SELECT * FROM notice_categories ORDER BY name').fetchall())
 @app.post('/admin/aluno')
 @admin_required
 def add_student():
@@ -152,24 +463,159 @@ def add_grade(sid):
 @admin_required
 def add_payment(sid):
     check_student(sid)
-    try:cents=round(float(value('amount').replace(',','.'))*100)
-    except ValueError:abort(400)
+    year=number('year');month=number('month')
+    if not 2000<=year<=2100 or not 1<=month<=12:abort(400)
+    try:
+        import decimal
+        cents=int((decimal.Decimal(value('amount').replace('.','').replace(',','.'))*100).quantize(decimal.Decimal('1')))
+    except (decimal.InvalidOperation,ValueError):abort(400,'Valor inválido')
     if cents<0:abort(400)
-    cur=db().execute('INSERT INTO payments(student_id,title,amount_cents,due_date,status) VALUES(?,?,?,?,?)',(sid,value('title'),cents,value('due_date'),value('status')));audit('criar','cobranca',cur.lastrowid);db().commit();return redirect(url_for('student',sid=sid)+'#financeiro')
+    due=value('due_date')
+    try:date.fromisoformat(due)
+    except ValueError:abort(400,'Data inválida')
+    status=value('status')
+    if status not in ('Pendente','Pago','Vencido'):abort(400)
+    pdf=request.files.get('file')
+    if not pdf or not pdf.filename:abort(400,'Envie o boleto em PDF.')
+    filename=store_upload(pdf,'pdf')
+    existing=db().execute('SELECT id FROM payments WHERE student_id=? AND reference_year=? AND reference_month=?',(sid,year,month)).fetchone()
+    if existing:
+        db().execute('UPDATE payments SET title=?,amount_cents=?,due_date=?,status=?,boleto_file=?,paid_at=CASE WHEN ?="Pago" THEN COALESCE(paid_at,CURRENT_TIMESTAMP) ELSE NULL END WHERE id=?',('Mensalidade',cents,due,status,filename,status,existing['id']))
+        pid=existing['id']
+    else:
+        cur=db().execute('INSERT INTO payments(student_id,title,amount_cents,due_date,status,reference_year,reference_month,boleto_file,paid_at) VALUES(?,?,?,?,?,?,?,?,CASE WHEN ?="Pago" THEN CURRENT_TIMESTAMP ELSE NULL END)',(sid,'Mensalidade',cents,due,status,year,month,filename,status))
+        pid=cur.lastrowid
+    audit('salvar','boleto',pid);db().commit()
+    return redirect(url_for('financeiro',sid=sid,ano=year))
+
 @app.post('/admin/cobranca/<int:pid>/status')
 @admin_required
 def payment_status(pid):
     status=value('status')
     if status not in ('Pendente','Pago','Vencido'):abort(400)
-    db().execute('UPDATE payments SET status=? WHERE id=?',(status,pid));audit('atualizar','cobranca',pid);db().commit();return redirect(request.referrer if request.referrer and request.referrer.startswith(request.host_url) else url_for('admin'))
+    db().execute('UPDATE payments SET status=?,paid_at=CASE WHEN ?="Pago" THEN COALESCE(paid_at,CURRENT_TIMESTAMP) ELSE NULL END WHERE id=?',(status,status,pid));audit('atualizar','cobranca',pid);db().commit();return redirect(request.referrer if request.referrer and request.referrer.startswith(request.host_url) else url_for('admin'))
+@app.get('/comunicado/<int:nid>/imagem')
+@login_required
+def notice_image(nid):
+    n=db().execute('SELECT image_file,published,archived FROM notices WHERE id=?',(nid,)).fetchone()
+    if not n or (current_user()['role']!='admin' and (not n['published'] or n['archived'])):abort(404)
+    return private_file('image',n['image_file'])
+
+@app.get('/comunicado/<int:nid>/anexo')
+@login_required
+def notice_attachment(nid):
+    n=db().execute('SELECT attachment_file,published,archived FROM notices WHERE id=?',(nid,)).fetchone()
+    if not n or (current_user()['role']!='admin' and (not n['published'] or n['archived'])):abort(404)
+    response=private_file('pdf',n['attachment_file'])
+    response.headers['Cache-Control']='private, no-store'
+    response.headers['Content-Disposition']=(('attachment' if request.args.get('baixar')=='1' else 'inline')+'; filename="comunicado.pdf"')
+    return response
+
 @app.post('/admin/aviso')
 @admin_required
 def add_notice():
-    cur=db().execute('INSERT INTO notices(title,body,kind) VALUES(?,?,?)',(value('title'),value('body',3000),value('kind')));audit('criar','aviso',cur.lastrowid);db().commit();return redirect(url_for('mural'))
+    title=value('title',200);body=value('body',10000)
+    if not title or not body:abort(400)
+    cid=number('notice_category_id') if value('notice_category_id') else None
+    if cid and not db().execute('SELECT 1 FROM notice_categories WHERE id=? AND active=1',(cid,)).fetchone():abort(400)
+    image=request.files.get('image');attachment=request.files.get('attachment')
+    image_file=store_upload(image,'image') if image and image.filename else None
+    attachment_file=store_upload(attachment,'pdf') if attachment and attachment.filename else None
+    cur=db().execute('INSERT INTO notices(title,body,kind,notice_category_id,image_file,attachment_file,pinned,published,archived) VALUES(?,?,?,?,?,?,?,?,0)',(title,body,value('kind',100) or 'Comunicado',cid,image_file,attachment_file,1 if value('pinned')=='1' else 0,1 if value('published')=='1' else 0))
+    audit('criar','aviso',cur.lastrowid);db().commit();return redirect(url_for('admin')+'#comunicados')
+
+@app.post('/admin/aviso/<int:nid>')
+@admin_required
+def edit_notice(nid):
+    old=db().execute('SELECT * FROM notices WHERE id=?',(nid,)).fetchone()
+    if not old:abort(404)
+    title=value('title',200);body=value('body',10000)
+    if not title or not body:abort(400)
+    cid=number('notice_category_id') if value('notice_category_id') else None
+    if cid and not db().execute('SELECT 1 FROM notice_categories WHERE id=?',(cid,)).fetchone():abort(400)
+    image=request.files.get('image');attachment=request.files.get('attachment')
+    image_file=store_upload(image,'image') if image and image.filename else old['image_file']
+    attachment_file=store_upload(attachment,'pdf') if attachment and attachment.filename else old['attachment_file']
+    db().execute('UPDATE notices SET title=?,body=?,notice_category_id=?,image_file=?,attachment_file=?,pinned=?,published=?,archived=? WHERE id=?',(title,body,cid,image_file,attachment_file,1 if value('pinned')=='1' else 0,1 if value('published')=='1' else 0,1 if value('archived')=='1' else 0,nid))
+    audit('editar','aviso',nid);db().commit();return redirect(url_for('admin')+'#comunicados')
+
+@app.post('/admin/categoria-comunicado')
+@admin_required
+def add_notice_category():
+    name=value('name',80)
+    if not name:abort(400)
+    cur=db().execute('INSERT INTO notice_categories(name) VALUES(?)',(name,));audit('criar','categoria_comunicado',cur.lastrowid);db().commit()
+    return redirect(url_for('admin')+'#comunicados')
+
+@app.post('/admin/categoria-comunicado/<int:cid>')
+@admin_required
+def edit_notice_category(cid):
+    name=value('name',80)
+    if not name:abort(400)
+    db().execute('UPDATE notice_categories SET name=?,active=? WHERE id=?',(name,1 if value('active')=='1' else 0,cid));audit('editar','categoria_comunicado',cid);db().commit()
+    return redirect(url_for('admin')+'#comunicados')
+
 @app.post('/admin/evento')
 @admin_required
 def add_event():
-    cur=db().execute('INSERT INTO events(event_date,title,details) VALUES(?,?,?)',(value('event_date'),value('title'),value('details',1000)));audit('criar','evento',cur.lastrowid);db().commit();return redirect(url_for('mural'))
+    start=value('event_date');end=value('end_date') or start
+    try:
+        if date.fromisoformat(end)<date.fromisoformat(start):abort(400)
+    except ValueError:abort(400)
+    cur=db().execute('INSERT INTO events(event_date,end_date,title,details,category_id) VALUES(?,?,?,?,?)',(start,end,value('title'),value('details',1000),number('category_id') if value('category_id') else None));audit('criar','evento',cur.lastrowid);db().commit();return redirect(url_for('calendario'))
+@app.post('/admin/evento/<int:eid>')
+@admin_required
+def edit_event(eid):
+    if not db().execute('SELECT 1 FROM events WHERE id=?',(eid,)).fetchone():abort(404)
+    start=value('event_date');end=value('end_date') or start
+    try:
+        if date.fromisoformat(end)<date.fromisoformat(start):abort(400)
+    except ValueError:abort(400)
+    cid=number('category_id') if value('category_id') else None
+    db().execute('UPDATE events SET event_date=?,end_date=?,title=?,details=?,category_id=? WHERE id=?',(start,end,value('title'),value('details',1000),cid,eid))
+    audit('editar','evento',eid);db().commit();return redirect(url_for('admin')+'#eventos')
+
+@app.post('/admin/evento/<int:eid>/excluir')
+@admin_required
+def delete_event(eid):
+    db().execute('DELETE FROM events WHERE id=?',(eid,));audit('excluir','evento',eid);db().commit()
+    return redirect(url_for('admin')+'#eventos')
+
+@app.post('/admin/mensagens/enviar')
+@admin_required
+def send_admin_message():
+    subject=value('subject',200);body=value('body',2000);scope=value('scope')
+    if not subject or not body or scope not in ('student','class','all'):abort(400)
+    if scope=='student':
+        sid=number('student_id');check_student(sid);student_ids=[sid]
+    elif scope=='class':
+        class_name=value('class_name',100)
+        if not class_name:abort(400)
+        student_ids=[r['id'] for r in db().execute('SELECT id FROM students WHERE class_name=? AND active=1',(class_name,))]
+    else:
+        student_ids=[r['id'] for r in db().execute('SELECT id FROM students WHERE active=1')]
+    for sid in student_ids:
+        cur=db().execute('INSERT INTO messages(student_id,sender_id,subject,body) VALUES(?,?,?,?)',(sid,session['uid'],subject,body))
+        audit('enviar','mensagem',cur.lastrowid)
+    db().commit();flash(f'Mensagem enviada para {len(student_ids)} aluno(s).','success')
+    return redirect(url_for('admin')+'#mensagens')
+
+@app.post('/admin/legenda')
+@admin_required
+def add_category():
+    name=value('name',80);color=value('color',7)
+    import re
+    if not name or not re.fullmatch(r'#[0-9a-fA-F]{6}',color):abort(400)
+    cur=db().execute('INSERT INTO event_categories(name,color) VALUES(?,?)',(name,color));audit('criar','legenda',cur.lastrowid);db().commit()
+    return redirect(url_for('admin')+'#legendas')
+@app.post('/admin/legenda/<int:cid>')
+@admin_required
+def update_category(cid):
+    name=value('name',80);color=value('color',7)
+    import re
+    if not name or not re.fullmatch(r'#[0-9a-fA-F]{6}',color):abort(400)
+    db().execute('UPDATE event_categories SET name=?,color=?,active=? WHERE id=?',(name,color,1 if value('active')=='1' else 0,cid));audit('editar','legenda',cid);db().commit()
+    return redirect(url_for('admin')+'#legendas')
 @app.errorhandler(sqlite3.IntegrityError)
 def integrity(_):db().rollback();flash('Registro duplicado ou dados inválidos.','error');return redirect(url_for('admin'))
 @app.errorhandler(403)
