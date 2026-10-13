@@ -54,7 +54,10 @@ def current_user():
     if 'uid' not in session:return None
     return db().execute('SELECT * FROM users WHERE id=? AND active=1',(session['uid'],)).fetchone()
 @app.context_processor
-def context():return {'me':current_user(),'today':date.today().isoformat()}
+def context():
+    me = current_user()
+    return {'me': me, 'today': date.today().isoformat(),
+            'nav_students': allowed_students() if me and me['role'] == 'responsavel' else []}
 def login_required(fn):
     @wraps(fn)
     def inner(*a,**kw):
