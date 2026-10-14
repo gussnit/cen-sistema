@@ -1,1 +1,133 @@
-{% extends 'base.html' %}{% block content %}<h1>▦ Calendário Escolar</h1><p class="muted">Calendário único para todas as famílias.</p><div class="card"><form method="get" action="{{url_for('calendario')}}" class="inline"><label>Mês<select name="mes">{% for m in range(1,13) %}<option value="{{m}}" {% if m==month %}selected{% endif %}>{{['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][m]}}</option>{% endfor %}</select></label><label>Ano<input name="ano" type="number" min="2000" max="2100" value="{{year}}"></label><button class="btn">Ver mês</button></form><h2>{{month_name}} de {{year}}</h2><div class="calendar-grid">{% for label in ['D','S','T','Q','Q','S','S'] %}<b>{{label}}</b>{% endfor %}{% for week in weeks %}{% for day in week %}<div class="calendar-day">{% if day %}<strong>{{day}}</strong>{% for e in events if e.event_date<=('%04d-%02d-%02d'|format(year,month,day)) and (e.end_date or e.event_date)>=('%04d-%02d-%02d'|format(year,month,day)) %}<a href="#evento-{{e.id}}" class="event-dot" style="background:{{e.color or '#397f85'}}" title="{{e.title}}"></a>{% endfor %}{% endif %}</div>{% endfor %}{% endfor %}</div></div><section class="card"><h2>Legendas</h2><div class="legend-list">{% for c in categories %}<span><i style="background:{{c.color}}"></i>{{c.name}}</span>{% endfor %}</div></section><h2>Datas do mês</h2>{% for e in events %}<article class="card" id="evento-{{e.id}}"><b>{{e.event_date[8:10]}}/{{e.event_date[5:7]}} — {{e.title}}</b><p class="muted">{{e.category or 'Evento escolar'}}</p><p>{{e.details}}</p></article>{% else %}<div class="card">Nenhum evento cadastrado neste mês.</div>{% endfor %}{% endblock %}
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  /* Estilos exclusivos do calendario: independem do CSS global. */
+  .cen-calendar, .cen-calendar * { box-sizing: border-box; }
+  .cen-calendar .calendar-grid {
+    display: grid !important;
+    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+    width: 100%;
+    margin-top: 16px;
+  }
+  .cen-calendar .calendar-weekday {
+    text-align: center;
+    padding: 8px 0;
+    font-size: .85rem;
+    color: #294a70;
+  }
+  .cen-calendar .calendar-day {
+    min-width: 0;
+    min-height: 62px;
+    padding: 7px 4px;
+    border: 1px solid #d4e3e4;
+    border-radius: 8px;
+    background: #fff;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+  .cen-calendar .calendar-day.is-empty { background: #f3f8f8; border-color: transparent; }
+  .cen-calendar .calendar-day.has-event { background: #f4fbfb; border-color: #94c4c5; }
+  .cen-calendar .calendar-day strong { font-size: .95rem; }
+  .cen-calendar .calendar-markers { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+  .cen-calendar .event-dot {
+    display: inline-block !important;
+    width: 11px !important;
+    height: 11px !important;
+    min-width: 11px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,.13);
+    text-decoration: none;
+  }
+  .cen-calendar .legend-list { display: flex !important; flex-wrap: wrap !important; gap: 10px 18px !important; }
+  .cen-calendar .legend-item { display: inline-flex !important; align-items: center; gap: 7px; font-size: .9rem; }
+  .cen-calendar .legend-swatch { display: inline-block; width: 13px; height: 13px; min-width: 13px; border-radius: 4px; }
+  .cen-calendar .calendar-event { scroll-margin-top: 20px; }
+  .cen-calendar .calendar-event p { overflow-wrap: anywhere; }
+  .cen-calendar { padding-bottom: 90px; }
+  @media (max-width: 540px) {
+    .cen-calendar .calendar-grid { gap: 3px !important; }
+    .cen-calendar .calendar-day { min-height: 49px; padding: 5px 2px; border-radius: 5px; }
+    .cen-calendar .calendar-day strong { font-size: .82rem; }
+    .cen-calendar .event-dot { width: 9px !important; height: 9px !important; min-width: 9px; }
+    .cen-calendar .calendar-weekday { font-size: .75rem; }
+  }
+  @media print {
+    .cen-calendar { padding-bottom: 0; }
+    .cen-calendar .calendar-day { break-inside: avoid; }
+  }
+</style>
+<div class="cen-calendar">
+  <h1>▦ Calendário Escolar</h1>
+  <p class="muted">Calendário único para todas as famílias.</p>
+  <div class="card">
+    <form method="get" action="{{ url_for('calendario') }}" class="inline">
+      <label>Mês
+        <select name="mes">
+          {% for m in range(1, 13) %}
+            <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][m] }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Ano
+        <input name="ano" type="number" min="2000" max="2100" value="{{ year }}">
+      </label>
+      <button class="btn" type="submit">Ver mês</button>
+    </form>
+    <h2>{{ month_name }} de {{ year }}</h2>
+    <div class="calendar-grid" role="grid" aria-label="Calendário de {{ month_name }} de {{ year }}">
+      {% for label in ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] %}
+        <div class="calendar-weekday" role="columnheader"><b>{{ label }}</b></div>
+      {% endfor %}
+      {% for week in weeks %}
+        {% for day in week %}
+          {% if day %}
+            {% set date_key = '%04d-%02d-%02d'|format(year, month, day) %}
+            {% set day_events = [] %}
+            {% for e in events %}
+              {% if e.event_date <= date_key and (e.end_date or e.event_date) >= date_key %}
+                {% if day_events.append(e) %}{% endif %}
+              {% endif %}
+            {% endfor %}
+            <div class="calendar-day{% if day_events %} has-event{% endif %}" role="gridcell" aria-label="Dia {{ day }}{% if day_events %}, {{ day_events|length }} evento(s){% endif %}">
+              <strong>{{ day }}</strong>
+              {% if day_events %}
+                <div class="calendar-markers">
+                  {% for e in day_events %}
+                    <a href="#evento-{{ e.id }}" class="event-dot" style="background-color: {{ e.color or '#397f85' }};" title="{{ e.title }}" aria-label="{{ e.title }}"></a>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          {% else %}
+            <div class="calendar-day is-empty" role="gridcell" aria-label="Sem data"></div>
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+  <section class="card">
+    <h2>Legendas</h2>
+    <div class="legend-list">
+      {% for c in categories %}
+        <span class="legend-item"><i class="legend-swatch" style="background-color: {{ c.color or '#397f85' }};"></i>{{ c.name }}</span>
+      {% else %}
+        <span class="muted">Nenhuma legenda cadastrada.</span>
+      {% endfor %}
+    </div>
+  </section>
+  <h2>Datas do mês</h2>
+  {% for e in events %}
+    <article class="card calendar-event" id="evento-{{ e.id }}">
+      <b>{{ e.event_date[8:10] }}/{{ e.event_date[5:7] }} — {{ e.title }}</b>
+      <p class="muted">{{ e.category or 'Evento escolar' }}</p>
+      {% if e.details %}<p>{{ e.details }}</p>{% endif %}
+    </article>
+  {% else %}
+    <div class="card">Nenhum evento cadastrado neste mês.</div>
+  {% endfor %}
+</div>
+{% endblock %}
