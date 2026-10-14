@@ -1,4 +1,5 @@
 import os, secrets, click, uuid, io
+import urllib.request, urllib.error, urllib.parse
 from werkzeug.utils import secure_filename
 from flask import send_file
 from datetime import date, datetime
@@ -160,30 +161,74 @@ def create_admin(name,email,password):
         db().commit()
         click.echo('Administrador criado.')
 
+# Arquivos privados no Supabase Storage. A chave nunca é enviada ao navegador.
+STORAGE_BUCKET = 'cen-arquivos'
+
+def storage_config():
+    url = os.environ.get('SUPABASE_URL', '').strip().rstrip('/')
+    key = os.environ.get('SUPABASE_SECRET_KEY', '').strip()
+    if not url.startswith('https://') or not key:
+        raise RuntimeError('Configure SUPABASE_URL e SUPABASE_SECRET_KEY no Render de testes.')
+    return url, key
+
+def storage_request(method, kind, filename, data=None):
+    if kind not in ('pdf', 'image') or not filename or '/' in filename or '\\' in filename:
+        abort(404)
+    url, key = storage_config()
+    object_path = urllib.parse.quote(f'{STORAGE_BUCKET}/{kind}/{filename}', safe='/')
+    endpoint = f'{url}/storage/v1/object/{'authenticated/' if method == 'GET' else ''}{object_path}'
+    headers = {'apikey': key, 'Authorization': 'Bearer ' + key}
+    if data is not None:
+        headers['Content-Type'] = 'application/pdf' if kind == 'pdf' else 'image/jpeg'
+        headers['x-upsert'] = 'false'
+    req = urllib.request.Request(endpoint, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=25) as response:
+            return response.read()
+    except urllib.error.HTTPError as exc:
+        if method == 'GET' and exc.code == 404:
+            abort(404)
+        app.logger.error('Falha Supabase Storage: operacao=%s status=%s', method, exc.code)
+        abort(502, 'Não foi possível acessar o armazenamento de arquivos.')
+    except (urllib.error.URLError, TimeoutError, OSError):
+        app.logger.exception('Falha de comunicação com Supabase Storage (%s)', method)
+        abort(502, 'Armazenamento temporariamente indisponível.')
+
+def storage_upload(raw, kind):
+    ext = '.pdf' if kind == 'pdf' else '.jpg'
+    filename = uuid.uuid4().hex + ext
+    storage_request('POST', kind, filename, raw)
+    return filename
+
+def storage_delete(kind, filename):
+    try:
+        storage_request('DELETE', kind, filename)
+    except Exception:
+        app.logger.warning('Não foi possível remover arquivo temporário do Storage.')
+
 def store_upload(file, kind):
-    if not file or not file.filename:abort(400)
-    raw=file.read()
-    if kind=='pdf':
-        if not raw.startswith(b'%PDF-'):abort(400,'Envie um PDF válido.')
-        ext='.pdf'
+    if not file or not file.filename: abort(400)
+    raw = file.read()
+    if kind == 'pdf':
+        if not raw.startswith(b'%PDF-'): abort(400, 'Envie um PDF válido.')
     else:
         from PIL import Image, UnidentifiedImageError
         try:
-            im=Image.open(io.BytesIO(raw));im.verify()
-            im=Image.open(io.BytesIO(raw));im.thumbnail((1600,1600))
-            out=io.BytesIO();im.convert('RGB').save(out,format='JPEG',quality=88);raw=out.getvalue()
-        except (UnidentifiedImageError,OSError,ValueError):abort(400,'Imagem inválida.')
-        ext='.jpg'
-    folder=UPLOAD_ROOT/kind;folder.mkdir(parents=True,exist_ok=True)
-    filename=uuid.uuid4().hex+ext
-    (folder/filename).write_bytes(raw)
-    return filename
+            im = Image.open(io.BytesIO(raw)); im.verify()
+            im = Image.open(io.BytesIO(raw)); im.thumbnail((1600, 1600))
+            out = io.BytesIO(); im.convert('RGB').save(out, format='JPEG', quality=88)
+            raw = out.getvalue()
+        except (UnidentifiedImageError, OSError, ValueError):
+            abort(400, 'Imagem inválida.')
+    return storage_upload(raw, kind)
 
-def private_file(kind,filename):
-    if not filename or '/' in filename or '\\' in filename:abort(404)
-    path=UPLOAD_ROOT/kind/filename
-    if not path.is_file():abort(404)
-    return send_file(path, mimetype='application/pdf' if kind=='pdf' else 'image/jpeg',as_attachment=False)
+def private_file(kind, filename):
+    if not filename or '/' in filename or '\\' in filename: abort(404)
+    raw = storage_request('GET', kind, filename)
+    response = send_file(io.BytesIO(raw), mimetype='application/pdf' if kind == 'pdf' else 'image/jpeg', as_attachment=False)
+    response.headers['Cache-Control'] = 'private, no-store'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 def current_user():
     if 'uid' not in session:return None
@@ -268,21 +313,27 @@ def upload_student_photo(sid):
 @admin_required
 def upload_student_card(sid):
     check_student(sid);pdf=request.files.get('file')
-    name=store_upload(pdf,'pdf')
+    # Gera a miniatura em memória, antes de publicar os dois arquivos.
     try:
         import fitz
-        doc=fitz.open(UPLOAD_ROOT/'pdf'/name)
-        if len(doc)<1:raise ValueError('PDF sem páginas')
-        pix=doc[0].get_pixmap(matrix=fitz.Matrix(1.1,1.1),alpha=False)
-        from PIL import Image
-        im=Image.open(io.BytesIO(pix.tobytes('png')));out=io.BytesIO();im.convert('RGB').save(out,format='JPEG',quality=84)
-        folder=UPLOAD_ROOT/'image';folder.mkdir(parents=True,exist_ok=True)
-        preview=uuid.uuid4().hex+'.jpg';(folder/preview).write_bytes(out.getvalue())
-        doc.close()
+        raw_pdf = pdf.read()
+        if not raw_pdf.startswith(b'%PDF-'): abort(400, 'Envie um PDF válido.')
+        with fitz.open(stream=raw_pdf, filetype='pdf') as doc:
+            if len(doc) < 1: raise ValueError('PDF sem páginas')
+            pix = doc[0].get_pixmap(matrix=fitz.Matrix(1.1,1.1), alpha=False)
+            from PIL import Image
+            im = Image.open(io.BytesIO(pix.tobytes('png')))
+            out = io.BytesIO(); im.convert('RGB').save(out, format='JPEG', quality=84)
+        preview_bytes = out.getvalue()
     except Exception:
-        (UPLOAD_ROOT/'pdf'/name).unlink(missing_ok=True)
-        flash('Não foi possível gerar a miniatura. Verifique o PDF.','error')
-        return redirect(url_for('student',sid=sid))
+        flash('Não foi possível gerar a miniatura. Verifique o PDF.', 'error')
+        return redirect(url_for('student', sid=sid))
+    name = storage_upload(raw_pdf, 'pdf')
+    try:
+        preview = storage_upload(preview_bytes, 'image')
+    except Exception:
+        storage_delete('pdf', name)
+        raise
     db().execute('UPDATE students SET card_pdf_file=?,card_preview_file=? WHERE id=?',(name,preview,sid))
     audit('carteirinha','aluno',sid);db().commit()
     flash('Carteirinha atualizada.','success');return redirect(url_for('student',sid=sid))
