@@ -1,4 +1,4 @@
-import os, sqlite3, secrets, click, uuid, io
+import os, secrets, click, uuid, io
 from werkzeug.utils import secure_filename
 from flask import send_file
 from datetime import date, datetime
@@ -15,56 +15,150 @@ app=Flask(__name__)
 app.config.update(SECRET_KEY=os.environ.get('SECRET_KEY') or secrets.token_hex(32),SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE','0')=='1',MAX_CONTENT_LENGTH=12*1024*1024)
 csrf=CSRFProtect(app)
 limiter=Limiter(get_remote_address,app=app,default_limits=[])
-DB=os.getenv('DATABASE_PATH',str(ROOT/'cen.sqlite3'))
+# DATABASE_URL é usada pela conexão PostgreSQL; DATABASE_PATH não é utilizada.
 UPLOAD_ROOT=Path(os.getenv('UPLOAD_ROOT',str(ROOT/'private_uploads'))).resolve()
+
+# PostgreSQL via Supabase. Nunca imprime DATABASE_URL nos logs.
+import psycopg
+from psycopg.rows import dict_row
+from psycopg import IntegrityError as PGIntegrityError
+
+class RowCompat(dict):
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
+class PortalCursor:
+    def __init__(self, cursor):
+        self._cursor = cursor
+        self.lastrowid = None
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        return RowCompat(row) if row is not None else None
+    def fetchall(self):
+        return [RowCompat(row) for row in self._cursor.fetchall()]
+    def __iter__(self):
+        return (RowCompat(row) for row in self._cursor)
+
+class PortalDB:
+    def __init__(self, conn):
+        self.conn = conn
+    def execute(self, query, params=()):
+        # Consultas existentes usam placeholders SQLite e INSERT OR IGNORE.
+        query = query.replace('?', '%s')
+        ignore = 'INSERT OR IGNORE INTO ' in query
+        query = query.replace('INSERT OR IGNORE INTO ', 'INSERT INTO ')
+        if ignore and 'ON CONFLICT' not in query.upper():
+            query += ' ON CONFLICT DO NOTHING'
+        # Compatibilidade com literais de string SQLite usados em CASE.
+        query = query.replace('="Pago"', "='Pago'")
+        # SELECT COUNT(*) etc. usam dict_row; acesso [0] resolvido abaixo.
+        insert = query.lstrip().upper().startswith('INSERT INTO ')
+        returns_id = insert and 'RETURNING ' not in query.upper() and 'ON CONFLICT' not in query.upper()
+        if returns_id:
+            query += ' RETURNING id'
+        cur = self.conn.execute(query, params)
+        out = PortalCursor(cur)
+        if returns_id:
+            record = cur.fetchone()
+            out.lastrowid = record['id'] if record else None
+        return out
+    def commit(self):
+        self.conn.commit()
+    def rollback(self):
+        self.conn.rollback()
+    def close(self):
+        self.conn.close()
 
 def db():
     if 'db' not in g:
-        g.db=sqlite3.connect(DB);g.db.row_factory=sqlite3.Row;g.db.execute('PRAGMA foreign_keys=ON')
+        url = os.getenv('DATABASE_URL', '').strip()
+        if not url:
+            raise RuntimeError('DATABASE_URL não configurada no Render (ambiente de teste).')
+        if not url.startswith(('postgresql://', 'postgres://')):
+            raise RuntimeError('DATABASE_URL deve ser uma URL PostgreSQL.')
+        g.db = PortalDB(psycopg.connect(url, row_factory=dict_row, connect_timeout=10, sslmode='require'))
     return g.db
+
 @app.teardown_appcontext
 def close(_):
-    c=g.pop('db',None)
-    if c:c.close()
+    c = g.pop('db', None)
+    if c:
+        c.close()
 
-def migrate_portal():
-    """Migração aditiva; preserva tabelas e registros existentes."""
-    conn=db()
-    cols={r['name'] for r in conn.execute('PRAGMA table_info(messages)')}
-    if 'subject' not in cols:conn.execute("ALTER TABLE messages ADD COLUMN subject TEXT NOT NULL DEFAULT 'Mensagem da escola'")
-    conn.executescript("""CREATE TABLE IF NOT EXISTS message_reads(message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(message_id,user_id));
-    CREATE TABLE IF NOT EXISTS event_categories(id INTEGER PRIMARY KEY,name TEXT NOT NULL UNIQUE,color TEXT NOT NULL DEFAULT '#397f85',active INTEGER NOT NULL DEFAULT 1);
-    """)
-    for name,color in [('Feriados','#d65a5a'),('Reuniões','#e5a33b'),('Avaliações','#9465bf'),('Recessos','#339b75'),('Eventos escolares','#397fc5'),('Treinamentos','#cc79a8'),('Sábados letivos','#168b99')]:
-        conn.execute('INSERT OR IGNORE INTO event_categories(name,color) VALUES(?,?)',(name,color))
-    cols={r['name'] for r in conn.execute('PRAGMA table_info(events)')}
-    if 'category_id' not in cols:conn.execute('ALTER TABLE events ADD COLUMN category_id INTEGER REFERENCES event_categories(id)')
-    cols={r['name'] for r in conn.execute('PRAGMA table_info(students)')}
-    for field in ('photo_file','card_pdf_file','card_preview_file'):
-        if field not in cols:conn.execute(f'ALTER TABLE students ADD COLUMN {field} TEXT')
-    conn.execute("CREATE TABLE IF NOT EXISTS portal_settings(key TEXT PRIMARY KEY, filename TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)")
-    conn.executescript("""
-    CREATE TABLE IF NOT EXISTS report_subjects(id INTEGER PRIMARY KEY, school_year INTEGER NOT NULL, segment TEXT NOT NULL CHECK(segment IN ('F2','EM')), class_name TEXT NOT NULL DEFAULT '*', name TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, UNIQUE(school_year,segment,class_name,name));
-    CREATE TABLE IF NOT EXISTS report_concepts(id INTEGER PRIMARY KEY, student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,school_year INTEGER NOT NULL,subject_id INTEGER NOT NULL REFERENCES report_subjects(id),term INTEGER NOT NULL CHECK(term BETWEEN 1 AND 3),co TEXT NOT NULL DEFAULT '',at TEXT NOT NULL DEFAULT '',ha TEXT NOT NULL DEFAULT '',re TEXT NOT NULL DEFAULT '',fa INTEGER NOT NULL DEFAULT 0 CHECK(fa>=0),UNIQUE(student_id,school_year,subject_id,term));
-    CREATE TABLE IF NOT EXISTS report_finals(student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,school_year INTEGER NOT NULL,subject_id INTEGER NOT NULL REFERENCES report_subjects(id),tf INTEGER NOT NULL DEFAULT 0 CHECK(tf>=0),cf TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',PRIMARY KEY(student_id,school_year,subject_id));
-    CREATE TABLE IF NOT EXISTS report_descriptions(student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,school_year INTEGER NOT NULL,term INTEGER NOT NULL CHECK(term BETWEEN 1 AND 3),body TEXT NOT NULL DEFAULT '',PRIMARY KEY(student_id,school_year,term));
-    CREATE TABLE IF NOT EXISTS report_publications(student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,school_year INTEGER NOT NULL,term INTEGER NOT NULL CHECK(term BETWEEN 1 AND 3),published INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(student_id,school_year,term));
-    """)
-    cols={r['name'] for r in conn.execute('PRAGMA table_info(payments)')}
-    for field,definition in [('reference_year','INTEGER'),('reference_month','INTEGER'),('boleto_file','TEXT'),('paid_at','TEXT')]:
-        if field not in cols:conn.execute(f'ALTER TABLE payments ADD COLUMN {field} {definition}')
-    conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS ux_payments_student_month ON payments(student_id,reference_year,reference_month) WHERE reference_year IS NOT NULL AND reference_month IS NOT NULL')
-    cols={r['name'] for r in conn.execute('PRAGMA table_info(notices)')}
-    for field,definition in [('image_file','TEXT'),('attachment_file','TEXT'),('pinned','INTEGER NOT NULL DEFAULT 0'),('published','INTEGER NOT NULL DEFAULT 1'),('archived','INTEGER NOT NULL DEFAULT 0')]:
-        if field not in cols:conn.execute(f'ALTER TABLE notices ADD COLUMN {field} {definition}')
-    conn.execute('CREATE TABLE IF NOT EXISTS notice_categories(id INTEGER PRIMARY KEY,name TEXT NOT NULL UNIQUE,active INTEGER NOT NULL DEFAULT 1)')
-    cols={r['name'] for r in conn.execute('PRAGMA table_info(notices)')}
-    if 'notice_category_id' not in cols:conn.execute('ALTER TABLE notices ADD COLUMN notice_category_id INTEGER REFERENCES notice_categories(id)')
-    for name in ('Avisos importantes','Eventos','Projetos','Informações gerais','Notícias do CEN'):
-        conn.execute('INSERT OR IGNORE INTO notice_categories(name) VALUES(?)',(name,))
-    cols={r['name'] for r in conn.execute('PRAGMA table_info(events)')}
-    if 'end_date' not in cols:conn.execute('ALTER TABLE events ADD COLUMN end_date TEXT')
-    conn.commit()
+SCHEMA_SQL = r'''
+CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','responsavel')),active INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS students (id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,registration TEXT NOT NULL UNIQUE,grade_level TEXT NOT NULL,class_name TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,photo_file TEXT,card_pdf_file TEXT,card_preview_file TEXT);
+CREATE TABLE IF NOT EXISTS guardians (user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,student_id BIGINT NOT NULL REFERENCES students(id) ON DELETE CASCADE,PRIMARY KEY(user_id,student_id));
+CREATE TABLE IF NOT EXISTS grades (id BIGSERIAL PRIMARY KEY,student_id BIGINT NOT NULL REFERENCES students(id) ON DELETE CASCADE,subject TEXT NOT NULL,term TEXT NOT NULL,score DOUBLE PRECISION NOT NULL CHECK(score>=0 AND score<=10),updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP::text),UNIQUE(student_id,subject,term));
+CREATE TABLE IF NOT EXISTS payments (id BIGSERIAL PRIMARY KEY,student_id BIGINT NOT NULL REFERENCES students(id) ON DELETE CASCADE,title TEXT NOT NULL,amount_cents INTEGER NOT NULL CHECK(amount_cents>=0),due_date TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('Pendente','Pago','Vencido')),reference_year INTEGER,reference_month INTEGER,boleto_file TEXT,paid_at TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_payments_student_month ON payments(student_id,reference_year,reference_month) WHERE reference_year IS NOT NULL AND reference_month IS NOT NULL;
+CREATE TABLE IF NOT EXISTS notice_categories(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL UNIQUE,active INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS notices(id BIGSERIAL PRIMARY KEY,title TEXT NOT NULL,body TEXT NOT NULL,kind TEXT NOT NULL DEFAULT 'Comunicado',created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP::text),image_file TEXT,attachment_file TEXT,pinned INTEGER NOT NULL DEFAULT 0,published INTEGER NOT NULL DEFAULT 1,archived INTEGER NOT NULL DEFAULT 0,notice_category_id BIGINT REFERENCES notice_categories(id));
+CREATE TABLE IF NOT EXISTS event_categories(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL UNIQUE,color TEXT NOT NULL DEFAULT '#397f85',active INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS events(id BIGSERIAL PRIMARY KEY,event_date TEXT NOT NULL,title TEXT NOT NULL,details TEXT NOT NULL DEFAULT '',category_id BIGINT REFERENCES event_categories(id),end_date TEXT);
+CREATE TABLE IF NOT EXISTS messages(id BIGSERIAL PRIMARY KEY,student_id BIGINT NOT NULL REFERENCES students(id) ON DELETE CASCADE,sender_id BIGINT NOT NULL REFERENCES users(id),body TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP::text),subject TEXT NOT NULL DEFAULT 'Mensagem da escola');
+CREATE TABLE IF NOT EXISTS message_reads(message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,read_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP::text),PRIMARY KEY(message_id,user_id));
+CREATE TABLE IF NOT EXISTS audit(id BIGSERIAL PRIMARY KEY,actor_id BIGINT NOT NULL,action TEXT NOT NULL,entity TEXT NOT NULL,entity_id BIGINT,created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP::text));
+CREATE TABLE IF NOT EXISTS portal_settings(key TEXT PRIMARY KEY,filename TEXT,updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text));
+CREATE TABLE IF NOT EXISTS report_subjects(id BIGSERIAL PRIMARY KEY,school_year INTEGER NOT NULL,segment TEXT NOT NULL CHECK(segment IN ('F2','EM')),class_name TEXT NOT NULL DEFAULT '*',name TEXT NOT NULL,position INTEGER NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,UNIQUE(school_year,segment,class_name,name));
+CREATE TABLE IF NOT EXISTS report_concepts(id BIGSERIAL PRIMARY KEY,student_id BIGINT NOT NULL REFERENCES students(id) ON DELETE CASCADE,school_year INTEGER NOT NULL,subject_id BIGINT NOT NULL REFERENCES report_subjects(id),term INTEGER NOT NULL CHECK(term BETWEEN 1 AND 3),co TEXT NOT NULL DEFAULT '',at TEXT NOT NULL DEFAULT '',ha TEXT NOT NULL DEFAULT '',re TEXT NOT NULL DEFAULT '',fa INTEGER NOT NULL DEFAULT 0 CHECK(fa>=0),UNIQUE(student_id,school_year,subject_id,term));
+CREATE TABLE IF NOT EXISTS report_finals(student_id BIGINT NOT NULL REFERENCES students(id) ON DELETE CASCADE,school_year INTEGER NOT NULL,subject_id BIGINT NOT NULL REFERENCES report_subjects(id),tf INTEGER NOT NULL DEFAULT 0 CHECK(tf>=0),cf TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',PRIMARY KEY(student_id,school_year,subject_id));
+CREATE TABLE IF NOT EXISTS report_descriptions(student_id BIGINT NOT NULL REFERENCES students(id) ON DELETE CASCADE,school_year INTEGER NOT NULL,term INTEGER NOT NULL CHECK(term BETWEEN 1 AND 3),body TEXT NOT NULL DEFAULT '',PRIMARY KEY(student_id,school_year,term));
+CREATE TABLE IF NOT EXISTS report_publications(student_id BIGINT NOT NULL REFERENCES students(id) ON DELETE CASCADE,school_year INTEGER NOT NULL,term INTEGER NOT NULL CHECK(term BETWEEN 1 AND 3),published INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(student_id,school_year,term));
+'''
+MIGRATIONS_SQL = r'''
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS subject TEXT NOT NULL DEFAULT 'Mensagem da escola';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS category_id BIGINT REFERENCES event_categories(id);
+ALTER TABLE events ADD COLUMN IF NOT EXISTS end_date TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_file TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS card_pdf_file TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS card_preview_file TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS reference_year INTEGER;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS reference_month INTEGER;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS boleto_file TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS paid_at TEXT;
+ALTER TABLE notices ADD COLUMN IF NOT EXISTS image_file TEXT;
+ALTER TABLE notices ADD COLUMN IF NOT EXISTS attachment_file TEXT;
+ALTER TABLE notices ADD COLUMN IF NOT EXISTS pinned INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE notices ADD COLUMN IF NOT EXISTS published INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE notices ADD COLUMN IF NOT EXISTS archived INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE notices ADD COLUMN IF NOT EXISTS notice_category_id BIGINT REFERENCES notice_categories(id);
+'''
+
+def init_db():
+    with app.app_context():
+        conn = db().conn
+        # Executa DDL em transação; se houver erro, nenhuma mudança parcial é confirmada.
+        try:
+            for statement in (SCHEMA_SQL + MIGRATIONS_SQL).split(';'):
+                if statement.strip():
+                    conn.execute(statement)
+        except Exception:
+            conn.rollback()
+            raise
+        for name, color in [('Feriados','#d65a5a'),('Reuniões','#e5a33b'),('Avaliações','#9465bf'),('Recessos','#339b75'),('Eventos escolares','#397fc5'),('Treinamentos','#cc79a8'),('Sábados letivos','#168b99')]:
+            conn.execute('INSERT INTO event_categories(name,color) VALUES(%s,%s) ON CONFLICT(name) DO NOTHING',(name,color))
+        for name in ('Avisos importantes','Eventos','Projetos','Informações gerais','Notícias do CEN'):
+            conn.execute('INSERT INTO notice_categories(name) VALUES(%s) ON CONFLICT(name) DO NOTHING',(name,))
+        conn.commit()
+
+@app.cli.command('init-db')
+def init_command():
+    init_db()
+    click.echo('Estrutura PostgreSQL conferida.')
+
+@app.cli.command('create-admin')
+@click.option('--name',prompt=True)
+@click.option('--email',prompt=True)
+@click.password_option()
+def create_admin(name,email,password):
+    init_db()
+    with app.app_context():
+        db().execute('INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,?)',(name.strip(),email.strip().lower(),generate_password_hash(password),'admin'))
+        db().commit()
+        click.echo('Administrador criado.')
 
 def store_upload(file, kind):
     if not file or not file.filename:abort(400)
@@ -90,33 +184,6 @@ def private_file(kind,filename):
     path=UPLOAD_ROOT/kind/filename
     if not path.is_file():abort(404)
     return send_file(path, mimetype='application/pdf' if kind=='pdf' else 'image/jpeg',as_attachment=False)
-
-def init_db():
-    with app.app_context():
-        db().executescript('''
-        CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','responsavel')),active INTEGER NOT NULL DEFAULT 1);
-        CREATE TABLE IF NOT EXISTS students(id INTEGER PRIMARY KEY,name TEXT NOT NULL,registration TEXT NOT NULL UNIQUE,grade_level TEXT NOT NULL,class_name TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1);
-        CREATE TABLE IF NOT EXISTS guardians(user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,PRIMARY KEY(user_id,student_id));
-        CREATE TABLE IF NOT EXISTS grades(id INTEGER PRIMARY KEY,student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,subject TEXT NOT NULL,term TEXT NOT NULL,score REAL NOT NULL CHECK(score>=0 AND score<=10),updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(student_id,subject,term));
-        CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY,student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,title TEXT NOT NULL,amount_cents INTEGER NOT NULL CHECK(amount_cents>=0),due_date TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('Pendente','Pago','Vencido')));
-        CREATE TABLE IF NOT EXISTS notices(id INTEGER PRIMARY KEY,title TEXT NOT NULL,body TEXT NOT NULL,kind TEXT NOT NULL DEFAULT 'Comunicado',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,event_date TEXT NOT NULL,title TEXT NOT NULL,details TEXT NOT NULL DEFAULT '');
-        CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY,student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,sender_id INTEGER NOT NULL REFERENCES users(id),body TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,actor_id INTEGER NOT NULL,action TEXT NOT NULL,entity TEXT NOT NULL,entity_id INTEGER,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-        ''');db().commit()
-        migrate_portal()
-
-@app.cli.command('init-db')
-def init_command():
-    init_db();click.echo('Banco de dados criado.')
-@app.cli.command('create-admin')
-@click.option('--name',prompt=True)
-@click.option('--email',prompt=True)
-@click.password_option()
-def create_admin(name,email,password):
-    init_db()
-    with app.app_context():
-        db().execute('INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,?)',(name.strip(),email.strip().lower(),generate_password_hash(password),'admin'));db().commit();click.echo('Administrador criado.')
 
 def current_user():
     if 'uid' not in session:return None
@@ -616,7 +683,7 @@ def update_category(cid):
     if not name or not re.fullmatch(r'#[0-9a-fA-F]{6}',color):abort(400)
     db().execute('UPDATE event_categories SET name=?,color=?,active=? WHERE id=?',(name,color,1 if value('active')=='1' else 0,cid));audit('editar','legenda',cid);db().commit()
     return redirect(url_for('admin')+'#legendas')
-@app.errorhandler(sqlite3.IntegrityError)
+@app.errorhandler(PGIntegrityError)
 def integrity(_):db().rollback();flash('Registro duplicado ou dados inválidos.','error');return redirect(url_for('admin'))
 @app.errorhandler(403)
 def forbidden(_):return 'Acesso não autorizado.',403
