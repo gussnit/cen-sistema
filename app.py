@@ -186,10 +186,14 @@ def storage_request(method, kind, filename, data=None):
         with urllib.request.urlopen(req, timeout=25) as response:
             return response.read()
     except urllib.error.HTTPError as exc:
-        if method == 'GET' and exc.code == 404:
-            abort(404)
-        app.logger.error('Falha Supabase Storage: operacao=%s status=%s', method, exc.code)
-        abort(502, 'Não foi possível acessar o armazenamento de arquivos.')
+    if method == 'GET' and exc.code == 404:
+        abort(404)
+    detalhe = exc.read().decode('utf-8', errors='replace')
+    app.logger.error(
+        'Falha Supabase Storage: operacao=%s status=%s resposta=%s',
+        method, exc.code, detalhe[:500]
+    )
+    abort(502, 'Não foi possível acessar o armazenamento de arquivos.')
     except (urllib.error.URLError, TimeoutError, OSError):
         app.logger.exception('Falha de comunicação com Supabase Storage (%s)', method)
         abort(502, 'Armazenamento temporariamente indisponível.')
