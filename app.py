@@ -182,7 +182,7 @@ def storage_request(method, kind, filename, data=None):
         headers['Content-Type'] = 'application/pdf' if kind == 'pdf' else 'image/jpeg'
         headers['x-upsert'] = 'false'
     req = urllib.request.Request(endpoint, data=data, headers=headers, method=method)
-        try:
+    try:
         with urllib.request.urlopen(req, timeout=25) as response:
             return response.read()
     except urllib.error.HTTPError as exc:
