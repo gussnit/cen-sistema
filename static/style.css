@@ -3,3 +3,33 @@
 /* Identidade visual oficial CEN */
 .logo-image{width:58px;height:58px;object-fit:contain;border-radius:50%;background:white;flex-shrink:0}
 :root{--teal:#344b9b;--dark:#2d328d;--line:#d6def0}
+
+/* CORREÇÃO RESPONSIVA DOS COMUNICADOS */
+
+.app {
+    min-width: 0;
+    overflow-x: hidden;
+}
+
+.notice-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.notice-card img.notice-cover {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    object-fit: contain !important;
+    margin: 0 auto 16px;
+    border-radius: 10px;
+}
+
+.notice-card h2,
+.notice-card p {
+    overflow-wrap: anywhere;
+}
