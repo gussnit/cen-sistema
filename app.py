@@ -353,11 +353,26 @@ def upload_home_banner():
 @app.route('/login',methods=['GET','POST'])
 @limiter.limit('8 per minute',methods=['POST'])
 def login():
-    if request.method=='POST':
-        u=db().execute('SELECT * FROM users WHERE email=? AND active=1',(value('email').lower(),)).fetchone()
-        if u and check_password_hash(u['password_hash'],request.form.get('password','')):
-            session.clear();session['uid']=u['id'];return redirect(url_for('home'))
-        flash('E-mail ou senha inválidos.','error')
+    if request.method == 'POST':
+        u = db().execute(
+            'SELECT * FROM users WHERE email=? AND active=1',
+            (value('email').lower(),)
+        ).fetchone()
+
+        if u and check_password_hash(
+            u['password_hash'],
+            request.form.get('password', '')
+        ):
+            session.clear()
+            session['uid'] = u['id']
+
+            if u['role'] == 'admin':
+                return redirect(url_for('admin'))
+
+            return redirect(url_for('home'))
+
+        flash('E-mail ou senha inválidos.', 'error')
+
     return render_template('login.html')
 @app.post('/logout')
 @login_required
