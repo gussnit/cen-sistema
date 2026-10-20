@@ -284,7 +284,7 @@ def home():
     selected=next((st for st in students if st['id']==session.get('selected_student_id')),students[0] if students else None)
     if selected:session['selected_student_id']=selected['id']
     banner=db().execute("SELECT filename FROM portal_settings WHERE key='home_banner'").fetchone()
-    return render_template('home.html',students=students,selected=selected,banner=banner['filename'] if banner else None)
+return render_template('home.html',students=students,selected=selected,banner=banner['filename'] if banner else None)
 @app.get('/aluno/<int:sid>/foto')
 @login_required
 def student_photo(sid):
