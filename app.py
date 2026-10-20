@@ -625,6 +625,39 @@ def add_guardian():
     password=request.form.get('password','')
     if len(password)<6:flash('A senha inicial precisa ter pelo menos 6 caracteres.','error');return redirect(url_for('admin'))
     cur=db().execute('INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,?)',(value('name'),value('email').lower(),generate_password_hash(password),'responsavel'));audit('criar','responsavel',cur.lastrowid);db().commit();return redirect(url_for('admin'))
+
+@app.post('/admin/responsavel/<int:uid>/editar')
+@admin_required
+def edit_guardian(uid):
+    guardian = db().execute(
+        "SELECT id FROM users WHERE id=? AND role='responsavel'",
+        (uid,)
+    ).fetchone()
+
+    if not guardian:
+        abort(404)
+
+    name = value('name')
+    email = value('email').lower()
+
+    if not name or not email:
+        abort(400)
+
+    db().execute(
+        """
+        UPDATE users
+        SET name=?, email=?
+        WHERE id=? AND role='responsavel'
+        """,
+        (name, email, uid)
+    )
+
+    audit('editar', 'responsavel', uid)
+    db().commit()
+
+    flash('Responsável atualizado com sucesso!', 'success')
+    return redirect(url_for('admin') + '#responsaveis')
+
 @app.post('/admin/vinculo')
 @admin_required
 def link_guardian():
