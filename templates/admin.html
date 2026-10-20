@@ -387,6 +387,36 @@ document.addEventListener('DOMContentLoaded', function () {
 
     <div class="guardian-students">
 
+<details class="card">
+    <summary>✏️ Editar responsável</summary>
+
+    <form method="post"
+          action="{{ url_for('edit_guardian', uid=u.id) }}">
+
+        <input type="hidden"
+               name="csrf_token"
+               value="{{ csrf_token() }}">
+
+        <label>Nome completo
+            <input name="name"
+                   value="{{ u.name }}"
+                   required>
+        </label>
+
+        <label>E-mail
+            <input name="email"
+                   type="email"
+                   value="{{ u.email }}"
+                   required>
+        </label>
+
+        <button class="btn" type="submit">
+            Salvar alterações
+        </button>
+
+    </form>
+</details>
+
         <h4>🎓 Alunos vinculados</h4>
 
         {% for s in linked_students %}
