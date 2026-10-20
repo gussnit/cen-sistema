@@ -568,7 +568,6 @@ def comunicados():
 
 @app.get('/admin')
 @admin_required
-
 def admin():
     students = allowed_students()
 
