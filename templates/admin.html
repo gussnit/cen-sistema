@@ -325,6 +325,56 @@ document.addEventListener('DOMContentLoaded', function () {
     </form>
 </details>
 
+<details class="card">
+    <summary>📸 Foto e carteirinha do aluno</summary>
+
+    <h3>📸 Foto do aluno</h3>
+
+    <form method="post"
+          action="{{ url_for('upload_student_photo', sid=s.id) }}"
+          enctype="multipart/form-data">
+
+        <input type="hidden"
+               name="csrf_token"
+               value="{{ csrf_token() }}">
+
+        <label>Selecionar foto (JPG, PNG ou WEBP)
+            <input type="file"
+                   name="file"
+                   accept="image/jpeg,image/png,image/webp"
+                   required>
+        </label>
+
+        <button class="btn" type="submit">
+            Enviar foto
+        </button>
+    </form>
+
+    <hr>
+
+    <h3>🪪 Carteirinha escolar</h3>
+
+    <form method="post"
+          action="{{ url_for('upload_student_card', sid=s.id) }}"
+          enctype="multipart/form-data">
+
+        <input type="hidden"
+               name="csrf_token"
+               value="{{ csrf_token() }}">
+
+        <label>Selecionar carteirinha em PDF
+            <input type="file"
+                   name="file"
+                   accept="application/pdf"
+                   required>
+        </label>
+
+        <button class="btn" type="submit">
+            Enviar carteirinha
+        </button>
+    </form>
+</details>
+
         {% else %}
 
         <p class="muted">
