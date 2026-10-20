@@ -568,8 +568,56 @@ def comunicados():
 
 @app.get('/admin')
 @admin_required
+
 def admin():
-    return render_template('admin.html',students=allowed_students(),guardians=db().execute("SELECT * FROM users WHERE role='responsavel' ORDER BY name").fetchall(),notices=db().execute('SELECT * FROM notices ORDER BY id DESC').fetchall(),events=db().execute('SELECT * FROM events ORDER BY event_date DESC').fetchall(),categories=db().execute('SELECT * FROM event_categories ORDER BY name').fetchall(),report_subjects=db().execute('SELECT * FROM report_subjects ORDER BY school_year DESC,segment,class_name,position').fetchall(),notice_categories=db().execute('SELECT * FROM notice_categories ORDER BY name').fetchall())
+    students = allowed_students()
+
+    guardians = db().execute(
+        "SELECT * FROM users WHERE role='responsavel' ORDER BY name"
+    ).fetchall()
+
+    guardian_links = db().execute("""
+        SELECT
+            g.student_id,
+            u.name AS guardian_name
+        FROM guardians g
+        JOIN users u ON u.id = g.user_id
+        WHERE u.role = 'responsavel'
+        ORDER BY u.name
+    """).fetchall()
+
+    student_guardians = {}
+
+    for link in guardian_links:
+        sid = link['student_id']
+
+        if sid not in student_guardians:
+            student_guardians[sid] = []
+
+        student_guardians[sid].append(link['guardian_name'])
+
+    return render_template(
+        'admin.html',
+        students=students,
+        guardians=guardians,
+        student_guardians=student_guardians,
+        notices=db().execute(
+            'SELECT * FROM notices ORDER BY id DESC'
+        ).fetchall(),
+        events=db().execute(
+            'SELECT * FROM events ORDER BY event_date DESC'
+        ).fetchall(),
+        categories=db().execute(
+            'SELECT * FROM event_categories ORDER BY name'
+        ).fetchall(),
+        report_subjects=db().execute(
+            'SELECT * FROM report_subjects '
+            'ORDER BY school_year DESC,segment,class_name,position'
+        ).fetchall(),
+        notice_categories=db().execute(
+            'SELECT * FROM notice_categories ORDER BY name'
+        ).fetchall()
+    )
 @app.post('/admin/aluno')
 @admin_required
 def add_student():
