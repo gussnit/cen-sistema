@@ -626,6 +626,7 @@ def add_guardian():
     if len(password)<6:flash('A senha inicial precisa ter pelo menos 6 caracteres.','error');return redirect(url_for('admin'))
     cur=db().execute('INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,?)',(value('name'),value('email').lower(),generate_password_hash(password),'responsavel'));audit('criar','responsavel',cur.lastrowid);db().commit();return redirect(url_for('admin'))
 
+
 @app.post('/admin/responsavel/<int:uid>/editar')
 @admin_required
 def edit_guardian(uid):
@@ -639,23 +640,38 @@ def edit_guardian(uid):
 
     name = value('name')
     email = value('email').lower()
+    password = request.form.get('password', '')
 
     if not name or not email:
         abort(400)
 
-    db().execute(
-        """
-        UPDATE users
-        SET name=?, email=?
-        WHERE id=? AND role='responsavel'
-        """,
-        (name, email, uid)
-    )
+    if password and len(password) < 6:
+        flash('A nova senha precisa ter pelo menos 6 caracteres.', 'error')
+        return redirect(url_for('admin') + '#responsaveis')
+
+    if password:
+        db().execute(
+            """
+            UPDATE users
+            SET name=?, email=?, password_hash=?
+            WHERE id=? AND role='responsavel'
+            """,
+            (name, email, generate_password_hash(password), uid)
+        )
+    else:
+        db().execute(
+            """
+            UPDATE users
+            SET name=?, email=?
+            WHERE id=? AND role='responsavel'
+            """,
+            (name, email, uid)
+        )
 
     audit('editar', 'responsavel', uid)
     db().commit()
 
-    flash('Responsável atualizado com sucesso!', 'success')
+    flash('Dados do responsável atualizados com sucesso!', 'success')
     return redirect(url_for('admin') + '#responsaveis')
 
 @app.post('/admin/vinculo')
