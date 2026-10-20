@@ -410,6 +410,19 @@ document.addEventListener('DOMContentLoaded', function () {
                    required>
         </label>
 
+<label>🔑 Nova senha (opcional)
+    <input name="password"
+           type="password"
+           minlength="6"
+           autocomplete="new-password"
+           placeholder="Deixe vazio para manter a senha atual">
+</label>
+
+<small class="muted">
+    Mínimo de 6 caracteres.
+    Se deixar em branco, a senha atual será mantida.
+</small>
+
         <button class="btn" type="submit">
             Salvar alterações
         </button>
