@@ -245,7 +245,14 @@ document.addEventListener('DOMContentLoaded', function () {
         <a class="student-card"
            href="{{ url_for('student',sid=s.id) }}">
 
-            <span>🎓</span>
+            {% if s.photo_file %}
+            <img src="{{ url_for('student_photo', sid=s.id) }}"
+                 alt="Foto de {{ s.name }}"
+                 loading="lazy"
+                 style="width:56px;height:56px;object-fit:cover;border-radius:12px;flex-shrink:0;">
+            {% else %}
+            <span aria-hidden="true" style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:#e8edff;border-radius:12px;font-size:26px;flex-shrink:0;">🎓</span>
+            {% endif %}
 
             <span>
                 <b>{{ s.name }}</b>
@@ -265,11 +272,26 @@ document.addEventListener('DOMContentLoaded', function () {
                         Nenhum responsável vinculado
                     {% endif %}
                 </small>
+
+                {% if s.card_pdf_file %}
+                <small style="display:block;margin-top:6px;color:#344b9b;font-weight:600;">
+                    🪪 Carteirinha disponível
+                </small>
+                {% endif %}
             </span>
 
             <b>›</b>
 
         </a>
+
+        {% if s.card_pdf_file %}
+        <a href="{{ url_for('student_card', sid=s.id) }}"
+           target="_blank" rel="noopener"
+           class="btn"
+           style="display:inline-block;margin:8px 0 12px;text-decoration:none;">
+            🪪 Abrir carteirinha
+        </a>
+        {% endif %}
 
 <details class="card">
     <summary>✏️ Editar aluno</summary>
