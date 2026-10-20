@@ -569,7 +569,9 @@ def comunicados():
 @app.get('/admin')
 @admin_required
 def admin():
-    students = allowed_students()
+    students = db().execute(
+    'SELECT * FROM students ORDER BY name'
+).fetchall()
 
     guardians = db().execute(
         "SELECT * FROM users WHERE role='responsavel' ORDER BY name"
