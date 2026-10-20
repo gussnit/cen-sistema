@@ -1,4 +1,4 @@
-    if status not in ('Pendente','Pago','Vencido'):abort(400)
+if status not in ('Pendente','Pago','Vencido'):abort(400)
     db().execute('UPDATE payments SET status=?,paid_at=CASE WHEN ?="Pago" THEN COALESCE(paid_at,CURRENT_TIMESTAMP) ELSE NULL END WHERE id=?',(status,status,pid));audit('atualizar','cobranca',pid);db().commit();return redirect(request.referrer if request.referrer and request.referrer.startswith(request.host_url) else url_for('admin'))
 @app.get('/comunicado/<int:nid>/imagem')
 @login_required
