@@ -681,6 +681,37 @@ def edit_guardian(uid):
     flash('Dados do responsável atualizados com sucesso!', 'success')
     return redirect(url_for('admin') + '#responsaveis')
 
+@app.post('/admin/vinculo/<int:uid>/<int:sid>/remover')
+@admin_required
+def unlink_guardian(uid, sid):
+    link = db().execute(
+        """
+        SELECT 1 FROM guardians g
+        JOIN users u ON u.id = g.user_id
+        WHERE g.user_id=?
+          AND g.student_id=?
+          AND u.role='responsavel'
+        """,
+        (uid, sid)
+    ).fetchone()
+
+    if not link:
+        abort(404)
+
+    db().execute(
+        """
+        DELETE FROM guardians
+        WHERE user_id=? AND student_id=?
+        """,
+        (uid, sid)
+    )
+
+    audit('desvincular', 'aluno', sid)
+    db().commit()
+
+    flash('Aluno desvinculado com sucesso!', 'success')
+    return redirect(url_for('admin') + '#responsaveis')
+
 @app.post('/admin/vinculo')
 @admin_required
 def link_guardian():
