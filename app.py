@@ -641,7 +641,8 @@ def edit_guardian(uid):
     name = value('name')
     email = value('email').lower()
     password = request.form.get('password', '')
-
+    active = 1 if request.form.get('active') == '1' else 0
+    
     if not name or not email:
         abort(400)
 
@@ -653,19 +654,25 @@ def edit_guardian(uid):
         db().execute(
             """
             UPDATE users
-            SET name=?, email=?, password_hash=?
+            SET name=?, email=?, password_hash=?, active=?
             WHERE id=? AND role='responsavel'
             """,
-            (name, email, generate_password_hash(password), uid)
+            (
+                name,
+                email,
+                generate_password_hash(password),
+                active,
+                uid
+            )
         )
     else:
         db().execute(
             """
             UPDATE users
-            SET name=?, email=?
+            SET name=?, email=?, active=?
             WHERE id=? AND role='responsavel'
             """,
-            (name, email, uid)
+            (name, email, active, uid)
         )
 
     audit('editar', 'responsavel', uid)
