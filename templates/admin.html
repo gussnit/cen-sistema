@@ -423,6 +423,22 @@ document.addEventListener('DOMContentLoaded', function () {
     Se deixar em branco, a senha atual será mantida.
 </small>
 
+<label>🔐 Situação do responsável
+    <select name="active" required>
+        <option value="1" {% if u.active %}selected{% endif %}>
+            🟢 Ativo — acesso permitido
+        </option>
+        <option value="0" {% if not u.active %}selected{% endif %}>
+            🔴 Inativo — acesso bloqueado
+        </option>
+    </select>
+</label>
+
+<small class="muted">
+    Desativar o responsável não exclui seu cadastro
+    nem os alunos vinculados.
+</small>
+
         <button class="btn" type="submit">
             Salvar alterações
         </button>
