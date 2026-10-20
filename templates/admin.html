@@ -271,6 +271,60 @@ document.addEventListener('DOMContentLoaded', function () {
 
         </a>
 
+<details class="card">
+    <summary>✏️ Editar aluno</summary>
+
+    <form method="post"
+          action="{{ url_for('update_student', sid=s.id) }}">
+
+        <input type="hidden"
+               name="csrf_token"
+               value="{{ csrf_token() }}">
+
+        <label>Nome completo
+            <input name="name"
+                   value="{{ s.name }}"
+                   required>
+        </label>
+
+        <label>Matrícula
+            <input name="registration"
+                   value="{{ s.registration }}"
+                   required>
+        </label>
+
+        <label>Ano / Série
+            <input name="grade_level"
+                   value="{{ s.grade_level }}"
+                   required>
+        </label>
+
+        <label>Turma
+            <input name="class_name"
+                   value="{{ s.class_name }}"
+                   required>
+        </label>
+
+        <label>Situação do aluno
+            <select name="active" required>
+                <option value="1"
+                    {% if s.active %}selected{% endif %}>
+                    🟢 Ativo
+                </option>
+
+                <option value="0"
+                    {% if not s.active %}selected{% endif %}>
+                    🔴 Inativo
+                </option>
+            </select>
+        </label>
+
+        <button class="btn" type="submit">
+            Salvar alterações
+        </button>
+    </form>
+</details>
+
         {% else %}
 
         <p class="muted">
