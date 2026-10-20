@@ -623,7 +623,7 @@ def update_student(sid):
 @admin_required
 def add_guardian():
     password=request.form.get('password','')
-    if len(password)<12:flash('A senha inicial precisa ter pelo menos 12 caracteres.','error');return redirect(url_for('admin'))
+    if len(password)<6:flash('A senha inicial precisa ter pelo menos 6 caracteres.','error');return redirect(url_for('admin'))
     cur=db().execute('INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,?)',(value('name'),value('email').lower(),generate_password_hash(password),'responsavel'));audit('criar','responsavel',cur.lastrowid);db().commit();return redirect(url_for('admin'))
 @app.post('/admin/vinculo')
 @admin_required
