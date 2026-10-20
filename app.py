@@ -595,11 +595,34 @@ def admin():
 
         student_guardians[sid].append(link['guardian_name'])
 
+guardian_students = {}
+
+for s in students:
+    guardian_students_for_student = db().execute(
+        """
+        SELECT g.user_id
+        FROM guardians g
+        JOIN users u ON u.id = g.user_id
+        WHERE g.student_id = ?
+          AND u.role = 'responsavel'
+        """,
+        (s['id'],)
+    ).fetchall()
+
+    for link in guardian_students_for_student:
+        uid = link['user_id']
+
+        if uid not in guardian_students:
+            guardian_students[uid] = []
+
+        guardian_students[uid].append(s)
+
     return render_template(
         'admin.html',
         students=students,
         guardians=guardians,
         student_guardians=student_guardians,
+        guardian_students=guardian_students,
         notices=db().execute(
             'SELECT * FROM notices ORDER BY id DESC'
         ).fetchall(),
