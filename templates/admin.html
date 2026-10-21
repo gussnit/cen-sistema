@@ -51,6 +51,109 @@
 }
 </style>
 
+<!-- PAINEL DE INDICADORES CEN -->
+<style>
+.cen-dashboard {
+    margin: 20px 0 28px;
+}
+
+.cen-dashboard h2 {
+    margin-bottom: 16px;
+}
+
+.cen-indicators {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 15px;
+}
+
+.cen-indicator {
+    background: #fff;
+    border: 1px solid #e5eaf2;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.04);
+}
+
+.cen-indicator-icon {
+    font-size: 28px;
+    margin-bottom: 12px;
+}
+
+.cen-indicator-number {
+    font-size: 32px;
+    font-weight: 800;
+    color: #243b64;
+}
+
+.cen-indicator-label {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 5px;
+}
+
+@media (max-width: 850px) {
+    .cen-indicators {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 380px) {
+    .cen-indicators {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<section class="cen-dashboard">
+    <h2>📊 Visão geral do CEN</h2>
+
+    <div class="cen-indicators">
+
+        <div class="cen-indicator">
+            <div class="cen-indicator-icon">🎓</div>
+            <div class="cen-indicator-number">
+                {{ total_alunos }}
+            </div>
+            <div class="cen-indicator-label">
+                Total de alunos
+            </div>
+        </div>
+
+        <div class="cen-indicator">
+            <div class="cen-indicator-icon">👥</div>
+            <div class="cen-indicator-number">
+                {{ total_responsaveis }}
+            </div>
+            <div class="cen-indicator-label">
+                Responsáveis cadastrados
+            </div>
+        </div>
+
+        <div class="cen-indicator">
+            <div class="cen-indicator-icon">✅</div>
+            <div class="cen-indicator-number">
+                {{ alunos_ativos }}
+            </div>
+            <div class="cen-indicator-label">
+                Alunos ativos
+            </div>
+        </div>
+
+        <div class="cen-indicator">
+            <div class="cen-indicator-icon">📋</div>
+            <div class="cen-indicator-number">
+                {{ alunos_inativos }}
+            </div>
+            <div class="cen-indicator-label">
+                Alunos inativos
+            </div>
+        </div>
+
+    </div>
+</section>
+<!-- FIM DO PAINEL -->
+
 <div class="admin-tabs">
     <button type="button" class="admin-tab active" data-tab="alunos">
         <span>🎓</span>Alunos
