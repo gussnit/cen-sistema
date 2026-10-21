@@ -500,6 +500,91 @@ def edit_report_subject(subject_id):
     db().execute('UPDATE report_subjects SET name=?,position=?,active=? WHERE id=?',(name,position,active,subject_id))
     audit('editar','disciplina',subject_id);db().commit();return redirect(url_for('admin')+'#disciplinas')
 
+@app.get('/aluno/<int:sid>/historico-financeiro')
+@login_required
+def historico_financeiro(sid):
+    student = check_student(sid)
+
+    year = request.args.get(
+        'ano',
+        default=date.today().year,
+        type=int
+    )
+
+    if not 2000 <= year <= 2100:
+        abort(400)
+
+    pagamentos = db().execute(
+        """
+        SELECT *
+        FROM payments
+        WHERE student_id = ?
+          AND reference_year = ?
+        ORDER BY reference_month
+        """,
+        (sid, year)
+    ).fetchall()
+
+    por_mes = {
+        p['reference_month']: p
+        for p in pagamentos
+        if p['reference_month'] is not None
+    }
+
+    nomes_meses = (
+        'Janeiro', 'Fevereiro', 'Março',
+        'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro',
+        'Outubro', 'Novembro', 'Dezembro'
+    )
+
+    meses = []
+
+    totais = {
+        'Pago': 0,
+        'Pendente': 0,
+        'Vencido': 0
+    }
+
+    hoje = date.today().isoformat()
+
+    for numero in range(1, 13):
+        pagamento = por_mes.get(numero)
+
+        valor = 0
+        situacao = 'Sem boleto'
+
+        if pagamento:
+            valor = pagamento['amount_cents']
+
+            if pagamento['status'] == 'Pago':
+                situacao = 'Pago'
+            elif (
+                pagamento['status'] == 'Vencido'
+                or pagamento['due_date'][:10] < hoje
+            ):
+                situacao = 'Vencido'
+            else:
+                situacao = 'Pendente'
+
+            totais[situacao] += valor
+
+        meses.append({
+            'numero': numero,
+            'nome': nomes_meses[numero - 1],
+            'valor': valor,
+            'situacao': situacao,
+            'pagamento': pagamento
+        })
+
+    return render_template(
+        'historico_financeiro.html',
+        s=student,
+        year=year,
+        meses=meses,
+        totais=totais
+    )
+
 @app.get('/aluno/<int:sid>/financeiro')
 @login_required
 def financeiro(sid):
