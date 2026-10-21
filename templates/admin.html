@@ -53,26 +53,42 @@
 
 <!-- PAINEL DE INDICADORES CEN -->
 <style>
+
 .cen-dashboard {
     margin: 20px 0 28px;
+    width: 100%;
+    display: block;
+    clear: both;
 }
 
 .cen-dashboard h2 {
+    display: block;
+    width: 100%;
     margin-bottom: 16px;
 }
 
-.cen-indicators {
+.cen-dashboard .cen-indicators {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 15px;
+    width: 100%;
 }
 
-.cen-indicator {
-    background: #fff;
-    border: 1px solid #e5eaf2;
-    border-radius: 16px;
-    padding: 20px;
-    box-shadow: 0 4px 14px rgba(0,0,0,.04);
+.cen-dashboard .cen-indicator {
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+@media (max-width: 850px) {
+    .cen-dashboard .cen-indicators {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 380px) {
+    .cen-dashboard .cen-indicators {
+        grid-template-columns: 1fr;
+    }
 }
 
 .cen-indicator-icon {
@@ -92,17 +108,6 @@
     margin-top: 5px;
 }
 
-@media (max-width: 850px) {
-    .cen-indicators {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 380px) {
-    .cen-indicators {
-        grid-template-columns: 1fr;
-    }
-}
 </style>
 
 <section class="cen-dashboard">
