@@ -1236,7 +1236,7 @@ def payment_status(pid):
             status = ?,
             paid_at = CASE
                 WHEN ? = 'Pago'
-                THEN COALESCE(paid_at, CURRENT_TIMESTAMP)
+                THEN COALESCE(paid_at, CURRENT_TIMESTAMP::text)
                 ELSE NULL
             END
         WHERE id = ?
