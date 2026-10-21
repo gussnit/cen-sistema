@@ -167,6 +167,192 @@
 </section>
 <!-- FIM DO PAINEL -->
 
+<!-- PAINEL FINANCEIRO CEN -->
+<style>
+.cen-financeiro {
+    margin: 24px 0;
+}
+
+.cen-financeiro-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.cen-financeiro-card {
+    background: #fff;
+    border: 1px solid #d6def0;
+    border-radius: 15px;
+    padding: 15px 8px;
+    text-align: center;
+    cursor: pointer;
+    font: inherit;
+    color: #243b64;
+    min-width: 0;
+}
+
+.cen-financeiro-card:hover,
+.cen-financeiro-card.ativo {
+    background: #edf3ff;
+    border-color: #344b9b;
+}
+
+.cen-financeiro-card .icone {
+    display: block;
+    font-size: 25px;
+}
+
+.cen-financeiro-card .numero {
+    display: block;
+    font-size: 28px;
+    font-weight: 800;
+    margin: 8px 0;
+}
+
+.cen-financeiro-card .descricao {
+    display: block;
+    font-size: 12px;
+}
+
+.cen-financeiro-lista {
+    margin-top: 15px;
+}
+
+.cen-financeiro-item {
+    background: #fff;
+    border: 1px solid #d6def0;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
+}
+
+.cen-financeiro-item p {
+    margin: 5px 0;
+}
+
+@media (max-width: 700px) {
+    .cen-financeiro-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+</style>
+
+<section class="cen-financeiro">
+    <h2>💰 Painel financeiro</h2>
+
+    <div class="cen-financeiro-grid">
+        <button type="button" class="cen-financeiro-card"
+                onclick="mostrarBoletos('todos', this)">
+            <span class="icone">📋</span>
+            <span class="numero">{{ pagamentos_admin|length }}</span>
+            <span class="descricao">Total de boletos</span>
+        </button>
+
+        <button type="button" class="cen-financeiro-card"
+                onclick="mostrarBoletos('pagos', this)">
+            <span class="icone">✅</span>
+            <span class="numero">{{ boletos_pagos|length }}</span>
+            <span class="descricao">Pagos</span>
+        </button>
+
+        <button type="button" class="cen-financeiro-card"
+                onclick="mostrarBoletos('pendentes', this)">
+            <span class="icone">🕒</span>
+            <span class="numero">{{ boletos_pendentes|length }}</span>
+            <span class="descricao">Pendentes</span>
+        </button>
+
+        <button type="button" class="cen-financeiro-card"
+                onclick="mostrarBoletos('vencidos', this)">
+            <span class="icone">🔴</span>
+            <span class="numero">{{ boletos_vencidos|length }}</span>
+            <span class="descricao">Vencidos</span>
+        </button>
+    </div>
+
+    <div id="cen-financeiro-resultados"
+         class="cen-financeiro-lista"
+         hidden>
+
+        {% for tipo, lista in [
+            ('todos', pagamentos_admin),
+            ('pagos', boletos_pagos),
+            ('pendentes', boletos_pendentes),
+            ('vencidos', boletos_vencidos)
+        ] %}
+
+        <div data-financeiro-grupo="{{ tipo }}" hidden>
+            <h3>
+                {% if tipo == 'vencidos' %}
+                    🔴 Boletos vencidos — alunos inadimplentes
+                {% elif tipo == 'pagos' %}
+                    ✅ Boletos pagos
+                {% elif tipo == 'pendentes' %}
+                    🕒 Boletos pendentes
+                {% else %}
+                    📋 Todos os boletos
+                {% endif %}
+            </h3>
+
+            {% for p in lista %}
+            <div class="cen-financeiro-item">
+                <p><strong>🎓 {{ p.aluno_nome }}</strong></p>
+                <p>Turma: {{ p.aluno_turma }}</p>
+                <p>Descrição: {{ p.title }}</p>
+                <p>Vencimento: {{ p.due_date }}</p>
+                <p>
+                    Valor:
+                    <strong>
+                        R$ {{ '%.2f'|format(p.amount_cents / 100) }}
+                    </strong>
+                </p>
+                <p>Status registrado: {{ p.status }}</p>
+            </div>
+            {% else %}
+            <p class="muted">Nenhum boleto nesta categoria.</p>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<script>
+function mostrarBoletos(tipo, botao) {
+    const resultados = document.getElementById(
+        'cen-financeiro-resultados'
+    );
+
+    const estavaAtivo = botao.classList.contains('ativo');
+
+    document.querySelectorAll('.cen-financeiro-card')
+        .forEach(card => card.classList.remove('ativo'));
+
+    document.querySelectorAll('[data-financeiro-grupo]')
+        .forEach(grupo => {
+            grupo.hidden = true;
+            grupo.style.display = 'none';
+        });
+
+    if (estavaAtivo) {
+        resultados.hidden = true;
+        return;
+    }
+
+    botao.classList.add('ativo');
+
+    const grupo = document.querySelector(
+        '[data-financeiro-grupo="' + tipo + '"]'
+    );
+
+    if (grupo) {
+        resultados.hidden = false;
+        grupo.hidden = false;
+        grupo.style.display = 'block';
+    }
+}
+</script>
+<!-- FIM DO PAINEL FINANCEIRO -->
+
 <div class="admin-tabs">
     <button type="button" class="admin-tab active" data-tab="alunos">
         <span>🎓</span>Alunos
