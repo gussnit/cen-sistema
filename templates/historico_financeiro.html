@@ -1,0 +1,126 @@
+
+{% extends 'base.html' %}
+{% block content %}
+
+<a href="{{ url_for('financeiro', sid=s.id, ano=year) }}">
+    ‹ Voltar ao financeiro
+</a>
+
+<h1>📋 Histórico Financeiro</h1>
+<p class="muted">
+    {{ s.name }} • {{ s.class_name }}
+</p>
+
+<!-- FILTRO POR ANO -->
+<div class="card">
+    <form method="get">
+        <label>
+            Ano letivo
+            <select name="ano">
+                {% for ano in range(2026, 2031) %}
+                <option value="{{ ano }}"
+                    {% if year == ano %}selected{% endif %}>
+                    {{ ano }}
+                </option>
+                {% endfor %}
+                {% if year < 2026 or year > 2030 %}
+                <option value="{{ year }}" selected>
+                    {{ year }}
+                </option>
+                {% endif %}
+            </select>
+        </label>
+        <button class="btn" type="submit">
+            🔎 Consultar
+        </button>
+    </form>
+</div>
+
+<!-- RESUMO FINANCEIRO -->
+<div style="
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 18px 0;
+">
+
+    <div class="card" style="border-left: 6px solid #26985c;">
+        <h3>💚 Total pago</h3>
+        <strong>
+            R$ {{ '%.2f'|format(totais['Pago'] / 100)|replace('.', ',') }}
+        </strong>
+    </div>
+
+    <div class="card" style="border-left: 6px solid #e7a72d;">
+        <h3>💛 Total pendente</h3>
+        <strong>
+            R$ {{ '%.2f'|format(totais['Pendente'] / 100)|replace('.', ',') }}
+        </strong>
+    </div>
+
+    <div class="card" style="border-left: 6px solid #d64045;">
+        <h3>❤️ Total vencido</h3>
+        <strong>
+            R$ {{ '%.2f'|format(totais['Vencido'] / 100)|replace('.', ',') }}
+        </strong>
+    </div>
+
+</div>
+
+<!-- RELAÇÃO DAS MENSALIDADES -->
+<div class="card">
+    <h2>Mensalidades de {{ year }}</h2>
+
+    <div style="overflow-x: auto;">
+        <table style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Mês</th>
+                    <th>Valor</th>
+                    <th>Situação</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for item in meses %}
+                <tr>
+                    <td>{{ item.nome }}</td>
+
+                    <td>
+                        {% if item.pagamento %}
+                            R$ {{ '%.2f'|format(item.valor / 100)|replace('.', ',') }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        {% if item.situacao == 'Pago' %}
+                            <span style="color:#218451;font-weight:700;">
+                                ● Pago
+                            </span>
+                        {% elif item.situacao == 'Vencido' %}
+                            <span style="color:#bb333a;font-weight:700;">
+                                ● Vencido
+                            </span>
+                        {% elif item.situacao == 'Pendente' %}
+                            <span style="color:#a56c00;font-weight:700;">
+                                ● Pendente
+                            </span>
+                        {% else %}
+                            <span class="muted">Sem boleto</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<p class="muted">
+    Os valores e as situações refletem os registros financeiros
+    cadastrados pela escola no portal.
+</p>
+
+{% endblock %}
