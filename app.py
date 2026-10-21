@@ -1,3 +1,15 @@
+
+from io import BytesIO
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle
+)
 import os, secrets, click, uuid, io
 import urllib.request, urllib.error, urllib.parse
 from werkzeug.utils import secure_filename
@@ -565,6 +577,166 @@ def calendario():
 @login_required
 def comunicados():
     return render_template('comunicados.html',notices=db().execute('SELECT n.*,c.name category_name FROM notices n LEFT JOIN notice_categories c ON c.id=n.notice_category_id WHERE n.published=1 AND n.archived=0 ORDER BY n.pinned DESC,n.created_at DESC,n.id DESC').fetchall())
+
+@app.get('/admin/financeiro/relatorio-pdf')
+@admin_required
+def relatorio_financeiro_pdf():
+    from flask import request, send_file
+    from xml.sax.saxutils import escape
+
+    hoje = date.today()
+
+    mes = request.args.get('mes', '').strip()
+    ano = request.args.get('ano', '').strip()
+
+    mes_num = int(mes) if mes.isdigit() and 1 <= int(mes) <= 12 else None
+    ano_num = int(ano) if ano.isdigit() and 1900 <= int(ano) <= 2100 else None
+
+    pagamentos = db().execute(
+        """
+        SELECT
+            p.*,
+            s.name AS aluno_nome,
+            s.class_name AS aluno_turma
+        FROM payments p
+        JOIN students s ON s.id = p.student_id
+        ORDER BY p.due_date DESC
+        """
+    ).fetchall()
+
+    vencidos = []
+
+    for p in pagamentos:
+        if mes_num is not None and p['reference_month'] != mes_num:
+            continue
+
+        if ano_num is not None and p['reference_year'] != ano_num:
+            continue
+
+        vencimento = date.fromisoformat(p['due_date'][:10])
+
+        if p['status'] != 'Pago' and (
+            p['status'] == 'Vencido' or vencimento < hoje
+        ):
+            vencidos.append(p)
+
+    meses = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril',
+        'Maio', 'Junho', 'Julho', 'Agosto',
+        'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ]
+
+    periodo_mes = meses[mes_num - 1] if mes_num else 'Todos os meses'
+    periodo_ano = str(ano_num) if ano_num else 'Todos os anos'
+
+    def moeda(centavos):
+        return (
+            f"{centavos / 100:,.2f}"
+            .replace(',', 'X')
+            .replace('.', ',')
+            .replace('X', '.')
+        )
+
+    buffer = BytesIO()
+
+    documento = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=30,
+        leftMargin=30,
+        topMargin=35,
+        bottomMargin=35
+    )
+
+    estilos = getSampleStyleSheet()
+    elementos = []
+
+    elementos.append(Paragraph(
+        'CEN - Relatório de Inadimplência',
+        estilos['Title']
+    ))
+
+    elementos.append(Spacer(1, 12))
+
+    elementos.append(Paragraph(
+        f'Período: {periodo_mes} / {periodo_ano}',
+        estilos['Normal']
+    ))
+
+    elementos.append(Paragraph(
+        f'Emitido em: {hoje.strftime("%d/%m/%Y")}',
+        estilos['Normal']
+    ))
+
+    elementos.append(Spacer(1, 18))
+
+    dados = [[
+        'Aluno',
+        'Turma',
+        'Descrição',
+        'Vencimento',
+        'Valor'
+    ]]
+
+    total_centavos = 0
+
+    for p in vencidos:
+        total_centavos += p['amount_cents']
+
+        dados.append([
+            Paragraph(escape(str(p['aluno_nome'])), estilos['Normal']),
+            Paragraph(escape(str(p['aluno_turma'] or '')), estilos['Normal']),
+            Paragraph(escape(str(p['title'])), estilos['Normal']),
+            p['due_date'][:10],
+            'R$ ' + moeda(p['amount_cents'])
+        ])
+
+    if not vencidos:
+        dados.append(['Nenhum boleto vencido', '', '', '', ''])
+
+    tabela = Table(
+        dados,
+        colWidths=[200, 105, 230, 100, 110],
+        repeatRows=1,
+        hAlign='LEFT'
+    )
+
+    tabela.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#344b9b')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('TOPPADDING', (0, 0), (-1, 0), 10),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.lightgrey),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [
+            colors.white,
+            colors.HexColor('#f3f6fc')
+        ])
+    ]))
+
+    elementos.append(tabela)
+    elementos.append(Spacer(1, 20))
+
+    elementos.append(Paragraph(
+        f'<b>Total de boletos vencidos:</b> {len(vencidos)}',
+        estilos['Normal']
+    ))
+
+    elementos.append(Paragraph(
+        f'<b>Total em atraso:</b> R$ {moeda(total_centavos)}',
+        estilos['Heading2']
+    ))
+
+    documento.build(elementos)
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name='CEN_Relatorio_Inadimplencia.pdf'
+    )
 
 @app.get('/admin')
 @admin_required
