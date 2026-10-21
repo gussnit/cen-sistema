@@ -578,6 +578,172 @@ def calendario():
 def comunicados():
     return render_template('comunicados.html',notices=db().execute('SELECT n.*,c.name category_name FROM notices n LEFT JOIN notice_categories c ON c.id=n.notice_category_id WHERE n.published=1 AND n.archived=0 ORDER BY n.pinned DESC,n.created_at DESC,n.id DESC').fetchall())
 
+@app.get('/admin/financeiro/relatorio-completo-pdf')
+@admin_required
+def relatorio_financeiro_completo_pdf():
+    from flask import request, send_file
+    from xml.sax.saxutils import escape
+
+    hoje = date.today()
+
+    mes = request.args.get('mes', '').strip()
+    ano = request.args.get('ano', '').strip()
+
+    mes_num = int(mes) if mes.isdigit() and 1 <= int(mes) <= 12 else None
+    ano_num = int(ano) if ano.isdigit() and 1900 <= int(ano) <= 2100 else None
+
+    pagamentos = db().execute(
+        """
+        SELECT
+            p.*,
+            s.name AS aluno_nome,
+            s.class_name AS aluno_turma
+        FROM payments p
+        JOIN students s ON s.id = p.student_id
+        ORDER BY p.due_date DESC
+        """
+    ).fetchall()
+
+    grupos = {
+        'Pago': [],
+        'Pendente': [],
+        'Vencido': []
+    }
+
+    for p in pagamentos:
+        if mes_num is not None and p['reference_month'] != mes_num:
+            continue
+        if ano_num is not None and p['reference_year'] != ano_num:
+            continue
+
+        vencimento = date.fromisoformat(p['due_date'][:10])
+
+        if p['status'] == 'Pago':
+            grupo = 'Pago'
+        elif p['status'] == 'Vencido' or vencimento < hoje:
+            grupo = 'Vencido'
+        else:
+            grupo = 'Pendente'
+
+        grupos[grupo].append(p)
+
+    meses = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril',
+        'Maio', 'Junho', 'Julho', 'Agosto',
+        'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ]
+
+    periodo_mes = meses[mes_num - 1] if mes_num else 'Todos os meses'
+    periodo_ano = str(ano_num) if ano_num else 'Todos os anos'
+
+    def moeda(centavos):
+        return (
+            f"{centavos / 100:,.2f}"
+            .replace(',', 'X')
+            .replace('.', ',')
+            .replace('X', '.')
+        )
+
+    buffer = BytesIO()
+    documento = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=30,
+        leftMargin=30,
+        topMargin=35,
+        bottomMargin=35
+    )
+
+    estilos = getSampleStyleSheet()
+    elementos = [
+        Paragraph('CEN - Relatório Financeiro Completo', estilos['Title']),
+        Spacer(1, 12),
+        Paragraph(f'Período: {periodo_mes} / {periodo_ano}', estilos['Normal']),
+        Paragraph(
+            f'Emitido em: {hoje.strftime("%d/%m/%Y")}',
+            estilos['Normal']
+        ),
+        Spacer(1, 18)
+    ]
+
+    for status, titulo in [
+        ('Pago', 'BOLETOS PAGOS'),
+        ('Pendente', 'BOLETOS PENDENTES'),
+        ('Vencido', 'BOLETOS VENCIDOS')
+    ]:
+        registros = grupos[status]
+        total = sum(p['amount_cents'] for p in registros)
+
+        elementos.append(Paragraph(titulo, estilos['Heading2']))
+
+        dados = [[
+            'Aluno', 'Turma', 'Descrição', 'Vencimento', 'Valor'
+        ]]
+
+        for p in registros:
+            dados.append([
+                Paragraph(escape(str(p['aluno_nome'])), estilos['Normal']),
+                Paragraph(escape(str(p['aluno_turma'] or '')), estilos['Normal']),
+                Paragraph(escape(str(p['title'])), estilos['Normal']),
+                date.fromisoformat(p['due_date'][:10]).strftime('%d/%m/%Y'),
+                'R$ ' + moeda(p['amount_cents'])
+            ])
+
+        if not registros:
+            dados.append(['Nenhum boleto nesta categoria', '', '', '', ''])
+
+        tabela = Table(
+            dados,
+            colWidths=[200, 105, 230, 100, 110],
+            repeatRows=1,
+            hAlign='LEFT'
+        )
+
+        tabela.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#344b9b')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.lightgrey),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 9),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [
+                colors.white, colors.HexColor('#f3f6fc')
+            ])
+        ]))
+
+        elementos.append(tabela)
+        elementos.append(Spacer(1, 8))
+        elementos.append(Paragraph(
+            f'<b>Quantidade:</b> {len(registros)}'
+            f' | <b>Total:</b> R$ {moeda(total)}',
+            estilos['Normal']
+        ))
+        elementos.append(Spacer(1, 20))
+
+    elementos.append(Paragraph('RESUMO FINANCEIRO', estilos['Heading2']))
+
+    for status, rotulo in [
+        ('Pago', 'Total registrado como pago'),
+        ('Pendente', 'Total pendente'),
+        ('Vencido', 'Total vencido')
+    ]:
+        total = sum(p['amount_cents'] for p in grupos[status])
+        elementos.append(Paragraph(
+            f'<b>{rotulo}:</b> R$ {moeda(total)}',
+            estilos['Normal']
+        ))
+
+    documento.build(elementos)
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name='CEN_Relatorio_Financeiro_Completo.pdf'
+    )
+
 @app.get('/admin/financeiro/relatorio-pdf')
 @admin_required
 def relatorio_financeiro_pdf():
