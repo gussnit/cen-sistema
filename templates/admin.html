@@ -240,6 +240,96 @@
 <section class="cen-financeiro">
     <h2>💰 Painel financeiro</h2>
 
+<!-- FILTROS FINANCEIROS -->
+<style>
+.cen-filtros-financeiros {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 12px;
+    margin: 18px 0 22px;
+    padding: 16px;
+    background: #f5f8ff;
+    border: 1px solid #d6def0;
+    border-radius: 14px;
+}
+
+.cen-filtro-campo {
+    flex: 1 1 150px;
+    min-width: 0;
+}
+
+.cen-filtro-campo label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.cen-filtro-campo select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #d6def0;
+    border-radius: 9px;
+    background: white;
+    font: inherit;
+}
+
+.cen-filtro-botao {
+    padding: 11px 20px;
+    background: #344b9b;
+    color: white;
+    border: none;
+    border-radius: 9px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+@media (max-width: 500px) {
+    .cen-filtro-botao {
+        width: 100%;
+    }
+}
+</style>
+
+<form method="get"
+      action="{{ url_for('admin') }}"
+      class="cen-filtros-financeiros">
+
+    <div class="cen-filtro-campo">
+        <label for="mes-financeiro">📅 Mês</label>
+        <select id="mes-financeiro" name="mes">
+            <option value="">Todos os meses</option>
+
+            {% for numero, nome in meses_financeiros %}
+            <option value="{{ numero }}"
+                {% if mes_selecionado == numero %}selected{% endif %}>
+                {{ nome }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="cen-filtro-campo">
+        <label for="ano-financeiro">📆 Ano</label>
+        <select id="ano-financeiro" name="ano">
+            <option value="">Todos os anos</option>
+
+            {% for ano in anos_financeiros %}
+            <option value="{{ ano }}"
+                {% if ano_selecionado == ano %}selected{% endif %}>
+                {{ ano }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <button type="submit" class="cen-filtro-botao">
+        🔎 Filtrar
+    </button>
+</form>
+<!-- FIM DOS FILTROS FINANCEIROS -->
+
 <!-- TOTAL DA INADIMPLÊNCIA -->
 <div class="cen-total-atraso">
     <div class="cen-total-atraso-icone">💰</div>
@@ -338,12 +428,14 @@
          class="cen-financeiro-lista"
          hidden>
 
-        {% for tipo, lista in [
-            ('todos', pagamentos_admin),
-            ('pagos', boletos_pagos),
-            ('pendentes', boletos_pendentes),
-            ('vencidos', boletos_vencidos)
-        ] %}
+        
+{% for tipo, lista in [
+    ('todos', pagamentos_filtrados),
+    ('pagos', boletos_pagos),
+    ('pendentes', boletos_pendentes),
+    ('vencidos', boletos_vencidos)
+] %}
+
 
         <div data-financeiro-grupo="{{ tipo }}" hidden>
             <h3>
