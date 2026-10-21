@@ -598,13 +598,61 @@ def admin():
         """
     ).fetchall()
 
+    # Período de referência disponível para o filtro financeiro
+    meses_financeiros = [
+        (1, 'Janeiro'), (2, 'Fevereiro'),
+        (3, 'Março'), (4, 'Abril'),
+        (5, 'Maio'), (6, 'Junho'),
+        (7, 'Julho'), (8, 'Agosto'),
+        (9, 'Setembro'), (10, 'Outubro'),
+        (11, 'Novembro'), (12, 'Dezembro')
+    ]
+
+    anos_financeiros = sorted(
+        {
+            p['reference_year']
+            for p in pagamentos_admin
+            if p['reference_year'] is not None
+        },
+        reverse=True
+    )
+
+    # Mês e ano escolhidos no painel financeiro
+    mes_param = request.args.get('mes', '').strip()
+    ano_param = request.args.get('ano', '').strip()
+
+    mes_selecionado = (
+        int(mes_param)
+        if mes_param.isdigit() and 1 <= int(mes_param) <= 12
+        else None
+    )
+
+    ano_selecionado = (
+        int(ano_param)
+        if ano_param.isdigit() and 1900 <= int(ano_param) <= 2100
+        else None
+    )
+
+    # Filtrar os boletos pelo período de referência
+    pagamentos_filtrados = [
+        p for p in pagamentos_admin
+        if (
+            mes_selecionado is None
+            or p['reference_month'] == mes_selecionado
+        )
+        and (
+            ano_selecionado is None
+            or p['reference_year'] == ano_selecionado
+        )
+    ]
+
     hoje = date.today()
 
     boletos_pagos = []
     boletos_pendentes = []
     boletos_vencidos = []
 
-    for pagamento in pagamentos_admin:
+    for pagamento in pagamentos_filtrados:
         status = pagamento['status']
         vencimento = date.fromisoformat(
             pagamento['due_date'][:10]
