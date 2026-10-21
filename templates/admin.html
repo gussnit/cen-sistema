@@ -427,6 +427,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <h2>👥 Responsáveis cadastrados ({{ guardians|length }})</h2>
 
+<div class="card" style="margin:14px 0;">
+    <label for="pesquisa-responsaveis">
+        🔎 Pesquisar responsável
+    </label>
+
+    <input
+        type="search"
+        id="pesquisa-responsaveis"
+        placeholder="Nome, e-mail ou aluno vinculado..."
+        autocomplete="off"
+        oninput="pesquisarResponsaveis(this.value)">
+
+    <small class="muted"
+           id="resultado-responsaveis"></small>
+</div>
 <style>
 .guardian-group {
     margin: 12px 0;
@@ -500,8 +515,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
 {% set linked_students = guardian_students.get(u.id, []) %}
 
-<details class="guardian-group">
-
+<details class="guardian-group"
+         data-responsavel
+         data-pesquisa="{{ (
+             u.name ~ ' ' ~
+             u.email ~ ' ' ~
+             (linked_students | map(attribute='name') | join(' '))
+         ) | lower | e }}">
     <summary>
         <span>👤</span>
 
@@ -765,4 +785,41 @@ function pesquisarAlunos(texto) {
         termo ? `${encontrados} aluno(s) encontrado(s)` : '';
 }
 </script>
+
+<script>
+function pesquisarResponsaveis(texto) {
+    const normalizar = valor =>
+        valor.toLocaleLowerCase('pt-BR')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim();
+
+    const termo = normalizar(texto);
+    let encontrados = 0;
+
+    document.querySelectorAll('[data-responsavel]').forEach(card => {
+        const dados = normalizar(card.dataset.pesquisa || '');
+        const corresponde = !termo || dados.includes(termo);
+
+        card.hidden = !corresponde;
+        card.style.display = corresponde ? '' : 'none';
+
+        if (corresponde) {
+            encontrados++;
+        }
+
+        if (termo && corresponde) {
+            card.open = true;
+        } else if (!termo) {
+            card.open = false;
+        }
+    });
+
+    document.getElementById('resultado-responsaveis').textContent =
+        termo
+            ? `${encontrados} responsável(is) encontrado(s)`
+            : '';
+}
+</script>
+
 {% endblock %}
