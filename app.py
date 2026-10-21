@@ -607,14 +607,16 @@ def admin():
         (9, 'Setembro'), (10, 'Outubro'),
         (11, 'Novembro'), (12, 'Dezembro')
     ]
-
+   
     anos_financeiros = sorted(
         {
-            p['reference_year']
-            for p in pagamentos_admin
-            if p['reference_year'] is not None
-        },
-        reverse=True
+            2026, 2027, 2028, 2029, 2030,
+            *(
+                p['reference_year']
+                for p in pagamentos_admin
+                if p['reference_year'] is not None
+            )
+        }
     )
 
     # Mês e ano escolhidos no painel financeiro
