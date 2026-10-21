@@ -1214,18 +1214,44 @@ def add_payment(sid):
     audit('salvar','boleto',pid);db().commit()
     return redirect(url_for('financeiro',sid=sid,ano=year))
 
-@app.post('/admin/cobranca/<int:pid>/status')
-@admin_required
-def payment_status(pid):
-    status=value('status')
-    if status not in ('Pendente','Pago','Vencido'):abort(400)
-    db().execute('UPDATE payments SET status=?,paid_at=CASE WHEN ?="Pago" THEN COALESCE(paid_at,CURRENT_TIMESTAMP) ELSE NULL END WHERE id=?',(status,status,pid));audit('atualizar','cobranca',pid);db().commit();return redirect(request.referrer if request.referrer and request.referrer.startswith(request.host_url) else url_for('admin'))
 @app.get('/comunicado/<int:nid>/imagem')
 @login_required
 def notice_image(nid):
     n=db().execute('SELECT image_file,published,archived FROM notices WHERE id=?',(nid,)).fetchone()
     if not n or (current_user()['role']!='admin' and (not n['published'] or n['archived'])):abort(404)
     return private_file('image',n['image_file'])
+
+@app.post('/admin/cobranca/<int:pid>/status')
+@admin_required
+def payment_status(pid):
+    status = value('status')
+
+    if status not in ('Pendente', 'Pago', 'Vencido'):
+        abort(400)
+
+    db().execute(
+        """
+        UPDATE payments
+        SET
+            status = ?,
+            paid_at = CASE
+                WHEN ? = 'Pago'
+                THEN COALESCE(paid_at, CURRENT_TIMESTAMP)
+                ELSE NULL
+            END
+        WHERE id = ?
+        """,
+        (status, status, pid)
+    )
+
+    audit('atualizar', 'cobranca', pid)
+    db().commit()
+
+    return redirect(
+        request.referrer
+        if request.referrer and request.referrer.startswith(request.host_url)
+        else url_for('admin')
+    )
 
 @app.get('/comunicado/<int:nid>/anexo')
 @login_required
