@@ -705,6 +705,11 @@ def admin():
         alunos_ativos=alunos_ativos,
         alunos_inativos=alunos_inativos,
         
+        meses_financeiros=meses_financeiros,
+        anos_financeiros=anos_financeiros,
+        mes_selecionado=mes_selecionado,
+        ano_selecionado=ano_selecionado,
+
         pagamentos_admin=pagamentos_admin,
         pagamentos_filtrados=pagamentos_filtrados,
         boletos_pagos=boletos_pagos,
