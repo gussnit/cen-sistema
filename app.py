@@ -638,6 +638,18 @@ def admin():
         if sid in students_by_id:
             guardian_students.setdefault(uid, []).append(students_by_id[sid])
 
+    total_inadimplencia_centavos = sum(
+        pagamento['amount_cents']
+        for pagamento in boletos_vencidos
+    )
+
+    total_inadimplencia = (
+        f"{total_inadimplencia_centavos / 100:,.2f}"
+        .replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
+
     return render_template(
         'admin.html',
         total_alunos=total_alunos,
@@ -649,6 +661,7 @@ def admin():
         boletos_pagos=boletos_pagos,
         boletos_pendentes=boletos_pendentes,
         boletos_vencidos=boletos_vencidos,
+        total_inadimplencia=total_inadimplencia,
 
         students=students,
         guardians=guardians,
