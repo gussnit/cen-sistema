@@ -1,5 +1,52 @@
 {% extends 'base.html' %}{% block content %}
 <h1>💳 Financeiro</h1><p class="muted">{{s.name}} • {{s.class_name}}</p>
+
+<!-- AVISO AUTOMÁTICO DE MENSALIDADES VENCIDAS -->
+{% set avisos = namespace(quantidade=0, total=0) %}
+
+{% for item in months %}
+    {% if item.payment and item.status in ['Vencido', 'Em atraso'] %}
+        {% set avisos.quantidade = avisos.quantidade + 1 %}
+        {% set avisos.total = avisos.total + item.payment.amount_cents %}
+    {% endif %}
+{% endfor %}
+
+{% if avisos.quantidade > 0 %}
+<div class="card" style="
+    border-left: 6px solid #d64045;
+    background: #fff5f5;
+    padding: 18px;
+    margin: 16px 0;
+    color: #7f1d1d;
+">
+    <h3 style="margin-top: 0; color: #991b1b;">
+        🔔 Atenção: mensalidade em atraso
+    </h3>
+
+    <p>
+        Identificamos
+        <strong>{{ avisos.quantidade }}</strong>
+        {% if avisos.quantidade == 1 %}
+            mensalidade com pendência de vencimento.
+        {% else %}
+            mensalidades com pendências de vencimento.
+        {% endif %}
+    </p>
+
+    <p>
+        <strong>Valor total:</strong>
+        R$ {{ '%.2f'|format(avisos.total / 100)|replace('.', ',') }}
+    </p>
+
+    <p style="margin-bottom: 0; font-size: 14px;">
+        Consulte abaixo os boletos e, caso já tenha efetuado
+        o pagamento, entre em contato com a secretaria
+        para verificar a atualização da situação financeira.
+    </p>
+</div>
+{% endif %}
+<!-- FIM DO AVISO AUTOMÁTICO -->
+
 <div class="card"><form method="get"><label>Ano letivo <input name="ano" type="number" min="2000" max="2100" value="{{year}}"></label><button class="btn">Consultar</button></form></div>
 <style>.finance-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.finance-month{border-left:6px solid #9ca3af}.finance-month.pago{border-color:#26985c}.finance-month.vencido{border-color:#d64045}.finance-month.atrasado{border-color:#e7a72d}.finance-month.aberto{border-color:#94a3b8}.finance-status{font-weight:700}.finance-month.pago .finance-status{color:#218451}.finance-month.vencido .finance-status{color:#bb333a}.finance-month.atrasado .finance-status{color:#a56c00}.finance-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.finance-actions a{display:inline-block}</style>
 <div class="finance-grid">{% for item in months %}{% set p=item.payment %}<div class="card finance-month {% if item.status=='Pago' %}pago{% elif item.status=='Vencido' %}vencido{% elif item.status=='Em atraso' %}atrasado{% elif item.status=='Em aberto' %}aberto{% endif %}"><h3>{{item.name}}</h3><p class="finance-status">{{item.status}}</p>
