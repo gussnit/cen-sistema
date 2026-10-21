@@ -330,6 +330,18 @@
 </form>
 <!-- FIM DOS FILTROS FINANCEIROS -->
 
+<!-- BOTÃO EXPORTAR RELATÓRIO FINANCEIRO -->
+<div style="margin: 0 0 22px; text-align: center;">
+    <a
+        href="{{ url_for('relatorio_financeiro_pdf', mes=mes_selecionado or '', ano=ano_selecionado or '') }}"
+        class="cen-filtro-botao"
+        style="display:inline-block; text-decoration:none;"
+    >
+        📄 Exportar relatório de inadimplência em PDF
+    </a>
+</div>
+<!-- FIM DO BOTÃO EXPORTAR -->
+
 <!-- TOTAL DA INADIMPLÊNCIA -->
 <div class="cen-total-atraso">
     <div class="cen-total-atraso-icone">💰</div>
