@@ -500,6 +500,185 @@ def edit_report_subject(subject_id):
     db().execute('UPDATE report_subjects SET name=?,position=?,active=? WHERE id=?',(name,position,active,subject_id))
     audit('editar','disciplina',subject_id);db().commit();return redirect(url_for('admin')+'#disciplinas')
 
+@app.get('/aluno/<int:sid>/historico-financeiro/pdf')
+@login_required
+def historico_financeiro_pdf(sid):
+    from flask import send_file
+    from xml.sax.saxutils import escape
+
+    student = check_student(sid)
+
+    year = request.args.get(
+        'ano',
+        default=date.today().year,
+        type=int
+    )
+
+    if not 2000 <= year <= 2100:
+        abort(400)
+
+    pagamentos = db().execute(
+        """
+        SELECT *
+        FROM payments
+        WHERE student_id = ?
+          AND reference_year = ?
+        ORDER BY reference_month
+        """,
+        (sid, year)
+    ).fetchall()
+
+    por_mes = {
+        p['reference_month']: p
+        for p in pagamentos
+        if p['reference_month'] is not None
+    }
+
+    nomes_meses = (
+        'Janeiro', 'Fevereiro', 'Março',
+        'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro',
+        'Outubro', 'Novembro', 'Dezembro'
+    )
+
+    totais = {
+        'Pago': 0,
+        'Pendente': 0,
+        'Vencido': 0
+    }
+
+    dados = [['Mês', 'Valor', 'Situação']]
+    hoje = date.today().isoformat()
+
+    def moeda(centavos):
+        return (
+            f'{centavos / 100:,.2f}'
+            .replace(',', 'X')
+            .replace('.', ',')
+            .replace('X', '.')
+        )
+
+    for numero, nome in enumerate(nomes_meses, start=1):
+        pagamento = por_mes.get(numero)
+
+        if pagamento is None:
+            dados.append([nome, '—', 'Sem boleto'])
+            continue
+
+        valor = pagamento['amount_cents']
+
+        if pagamento['status'] == 'Pago':
+            situacao = 'Pago'
+        elif (
+            pagamento['status'] == 'Vencido'
+            or pagamento['due_date'][:10] < hoje
+        ):
+            situacao = 'Vencido'
+        else:
+            situacao = 'Pendente'
+
+        totais[situacao] += valor
+
+        dados.append([
+            nome,
+            'R$ ' + moeda(valor),
+            situacao
+        ])
+
+    buffer = BytesIO()
+
+    documento = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=40,
+        bottomMargin=40
+    )
+
+    estilos = getSampleStyleSheet()
+
+    elementos = [
+        Paragraph(
+            'CEN - Histórico Financeiro Individual',
+            estilos['Title']
+        ),
+        Spacer(1, 16),
+        Paragraph(
+            '<b>Aluno:</b> ' + escape(str(student['name'])),
+            estilos['Normal']
+        ),
+        Paragraph(
+            '<b>Turma:</b> ' + escape(str(student['class_name'] or '')),
+            estilos['Normal']
+        ),
+        Paragraph(
+            f'<b>Ano letivo:</b> {year}',
+            estilos['Normal']
+        ),
+        Paragraph(
+            f'<b>Emitido em:</b> {date.today().strftime("%d/%m/%Y")}',
+            estilos['Normal']
+        ),
+        Spacer(1, 20)
+    ]
+
+    tabela = Table(
+        dados,
+        colWidths=[180, 150, 170],
+        repeatRows=1,
+        hAlign='CENTER'
+    )
+
+    tabela.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#344b9b')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.lightgrey),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [
+            colors.white,
+            colors.HexColor('#f3f6fc')
+        ])
+    ]))
+
+    elementos.append(tabela)
+    elementos.append(Spacer(1, 20))
+
+    elementos.append(Paragraph(
+        'RESUMO FINANCEIRO',
+        estilos['Heading2']
+    ))
+
+    for situacao, titulo in (
+        ('Pago', 'Total pago'),
+        ('Pendente', 'Total pendente'),
+        ('Vencido', 'Total vencido')
+    ):
+        elementos.append(Paragraph(
+            f'<b>{titulo}:</b> R$ {moeda(totais[situacao])}',
+            estilos['Normal']
+        ))
+
+    elementos.append(Spacer(1, 16))
+    elementos.append(Paragraph(
+        'Os valores refletem os registros cadastrados '
+        'pela escola no portal.',
+        estilos['Normal']
+    ))
+
+    documento.build(elementos)
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'CEN_Historico_Financeiro_{sid}_{year}.pdf'
+    )
+
 @app.get('/aluno/<int:sid>/historico-financeiro')
 @login_required
 def historico_financeiro(sid):
