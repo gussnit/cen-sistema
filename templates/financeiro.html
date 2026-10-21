@@ -1,6 +1,20 @@
 {% extends 'base.html' %}{% block content %}
 <h1>💳 Financeiro</h1><p class="muted">{{s.name}} • {{s.class_name}}</p>
 
+<!-- ACESSO AO HISTÓRICO FINANCEIRO INDIVIDUAL -->
+{% if me.role == 'admin' %}
+<div class="card" style="margin: 16px 0;">
+    <a
+        class="btn"
+        href="{{ url_for('historico_financeiro', sid=s.id, ano=year) }}"
+        style="display:inline-block; text-decoration:none;"
+    >
+        📋 Consultar histórico financeiro do aluno
+    </a>
+</div>
+{% endif %}
+<!-- FIM DO ACESSO AO HISTÓRICO -->
+
 <!-- AVISO AUTOMÁTICO DE MENSALIDADES VENCIDAS -->
 {% set avisos = namespace(quantidade=0, total=0) %}
 
