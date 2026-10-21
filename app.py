@@ -586,6 +586,39 @@ def admin():
 
     total_responsaveis = len(guardians)
 
+    pagamentos_admin = db().execute(
+        """
+        SELECT
+            p.*,
+            s.name AS aluno_nome,
+            s.class_name AS aluno_turma
+        FROM payments p
+        JOIN students s ON s.id = p.student_id
+        ORDER BY p.due_date DESC
+        """
+    ).fetchall()
+
+    hoje = date.today()
+
+    boletos_pagos = []
+    boletos_pendentes = []
+    boletos_vencidos = []
+
+    for pagamento in pagamentos_admin:
+        status = pagamento['status']
+        vencimento = date.fromisoformat(
+            pagamento['due_date'][:10]
+        )
+
+        if status == 'Pago':
+            boletos_pagos.append(pagamento)
+
+        elif status == 'Vencido' or vencimento < hoje:
+            boletos_vencidos.append(pagamento)
+
+        else:
+            boletos_pendentes.append(pagamento)
+
     guardian_links = db().execute(
         """SELECT g.student_id, g.user_id, u.name AS guardian_name
            FROM guardians g
@@ -611,6 +644,12 @@ def admin():
         total_responsaveis=total_responsaveis,
         alunos_ativos=alunos_ativos,
         alunos_inativos=alunos_inativos,
+        
+        pagamentos_admin=pagamentos_admin,
+        boletos_pagos=boletos_pagos,
+        boletos_pendentes=boletos_pendentes,
+        boletos_vencidos=boletos_vencidos,
+
         students=students,
         guardians=guardians,
         student_guardians=student_guardians,
