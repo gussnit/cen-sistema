@@ -124,7 +124,16 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 <section id="alunos" class="admin-panel active">
 <h2>🎓 Alunos cadastrados ({{ students|length }})</h2>
-
+<div class="card" style="margin:14px 0;">
+    <label for="pesquisa-alunos">🔎 Pesquisar aluno</label>
+    <input
+        type="search"
+        id="pesquisa-alunos"
+        placeholder="Digite nome, matrícula, série ou turma..."
+        autocomplete="off"
+        oninput="pesquisarAlunos(this.value)">
+    <small class="muted" id="resultado-pesquisa"></small>
+</div>
 <style>
 .segment-group {
     margin: 12px 0;
@@ -226,7 +235,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 {% for emoji, name, group in segments %}
 
-<details class="segment-group">
+<details class="segment-group" data-segmento>
 
     <summary>
         <span>{{ emoji }}</span>
@@ -241,7 +250,9 @@ document.addEventListener('DOMContentLoaded', function () {
     <div class="segment-students">
 
         {% for s in group %}
-
+<div class="aluno-pesquisavel"
+     data-pesquisa="{{ (s.name ~ ' ' ~ s.registration ~ ' ' ~ s.grade_level ~ ' ' ~ s.class_name)|lower }}">
+<div class="aluno-pesquisavel"
         <a class="student-card"
            href="{{ url_for('student',sid=s.id) }}">
 
@@ -250,6 +261,7 @@ document.addEventListener('DOMContentLoaded', function () {
                  alt="Foto de {{ s.name }}"
                  loading="lazy"
                  style="width:56px;height:56px;object-fit:cover;border-radius:12px;flex-shrink:0;">
+</div>    
             {% else %}
             <span aria-hidden="true" style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:#e8edff;border-radius:12px;font-size:26px;flex-shrink:0;">🎓</span>
             {% endif %}
@@ -709,4 +721,48 @@ document.addEventListener('DOMContentLoaded', function () {
 {% for n in notices %}<details class="card"><summary>{{n.title}} {% if n.pinned %}📌{% endif %} {% if not n.published %}(rascunho){% endif %} {% if n.archived %}(arquivado){% endif %}</summary><form method="post" enctype="multipart/form-data" action="{{url_for('edit_notice',nid=n.id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><label>Título<input name="title" value="{{n.title}}" required></label><label>Texto<textarea name="body" rows="5" required>{{n.body}}</textarea></label><label>Categoria<select name="notice_category_id"><option value="">Geral</option>{% for c in notice_categories %}<option value="{{c.id}}" {% if n.notice_category_id==c.id %}selected{% endif %}>{{c.name}}</option>{% endfor %}</select></label><label>Trocar imagem (opcional)<input type="file" name="image" accept="image/*"></label><label>Trocar PDF (opcional)<input type="file" name="attachment" accept="application/pdf"></label><label><input type="checkbox" name="pinned" value="1" {% if n.pinned %}checked{% endif %}> Fixar no topo</label><label><input type="checkbox" name="published" value="1" {% if n.published %}checked{% endif %}> Publicado</label><label><input type="checkbox" name="archived" value="1" {% if n.archived %}checked{% endif %}> Arquivado</label><button class="btn">Atualizar</button></form></details>{% endfor %}
 <details class="card"><summary>+ Nova categoria</summary><form method="post" action="{{url_for('add_notice_category')}}"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><label>Nome<input name="name" required maxlength="80"></label><button class="btn">Adicionar categoria</button></form></details>
 {% for c in notice_categories %}<details class="card"><summary>{{c.name}} {% if not c.active %}(desativada){% endif %}</summary><form method="post" action="{{url_for('edit_notice_category',cid=c.id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><label>Nome<input name="name" value="{{c.name}}" required></label><label>Estado<select name="active"><option value="1" {% if c.active %}selected{% endif %}>Ativa</option><option value="0" {% if not c.active %}selected{% endif %}>Desativada</option></select></label><button class="btn">Salvar categoria</button></form></details>{% endfor %}</section><section id="eventos" class="admin-panel"><h2>📅 Eventos do calendário</h2><details class="card"><summary>+ Cadastrar evento</summary><form method="post" action="{{url_for('add_event')}}"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><label>Data inicial<input type="date" name="event_date" required></label><label>Data final (opcional)<input type="date" name="end_date"></label><label>Evento<input name="title" required></label><label>Detalhes<textarea name="details"></textarea></label><label>Legenda<select name="category_id"><option value="">Sem categoria</option>{% for c in categories if c.active %}<option value="{{c.id}}">{{c.name}}</option>{% endfor %}</select></label><button class="btn">Cadastrar evento</button></form></details>{% for e in events %}<details class="card"><summary>{{e.title}} — {{e.event_date}}{% if e.end_date and e.end_date!=e.event_date %} a {{e.end_date}}{% endif %}</summary><form method="post" action="{{url_for('edit_event',eid=e.id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><label>Data inicial<input name="event_date" type="date" value="{{e.event_date}}" required></label><label>Data final<input name="end_date" type="date" value="{{e.end_date or e.event_date}}"></label><label>Título<input name="title" value="{{e.title}}" required></label><label>Detalhes<textarea name="details">{{e.details}}</textarea></label><label>Legenda<select name="category_id"><option value="">Sem categoria</option>{% for c in categories %}<option value="{{c.id}}" {% if e.category_id==c.id %}selected{% endif %}>{{c.name}}</option>{% endfor %}</select></label><button class="btn">Salvar evento</button></form><form method="post" action="{{url_for('delete_event',eid=e.id)}}" onsubmit="return confirm('Excluir este evento?')"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><button class="btn" type="submit">Excluir evento</button></form></details>{% endfor %}</section><section id="legendas" class="admin-panel"><h2>🎨 Legendas do calendário</h2>{% for c in categories %}<details class="card"><summary><span style="color:{{c.color}}">●</span> {{c.name}} {% if not c.active %}(desativada){% endif %}</summary><form method="post" action="{{url_for('update_category',cid=c.id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><label>Nome<input name="name" value="{{c.name}}" required></label><label>Cor<input type="color" name="color" value="{{c.color}}"></label><label>Estado<select name="active"><option value="1" {% if c.active %}selected{% endif %}>Ativa</option><option value="0" {% if not c.active %}selected{% endif %}>Desativada</option></select></label><button class="btn">Salvar legenda</button></form></details>{% endfor %}<details class="card"><summary>+ Nova legenda</summary><form method="post" action="{{url_for('add_category')}}"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><label>Nome<input name="name" required maxlength="80"></label><label>Cor<input type="color" name="color" value="#397f85"></label><button class="btn">Adicionar</button></form></details></section><section id="disciplinas" class="admin-panel"><h2>📚 Disciplinas dos boletins</h2><p class="muted">As disciplinas iniciais são criadas quando o boletim de um aluno do segmento é acessado. Pode adicionar disciplinas por ano e turma. Desative em vez de excluir para preservar históricos.</p><details class="card"><summary>+ Adicionar disciplina</summary><form method="post" action="{{url_for('add_report_subject')}}"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><label>Ano letivo<input type="number" name="year" value="2026" required></label><label>Segmento<select name="segment"><option value="F2">Fundamental II</option><option value="EM">Ensino Médio</option></select></label><label>Turma (ou * para todas)<input name="class_name" value="*" required></label><label>Nome<input name="name" required></label><label>Ordem<input type="number" name="position" value="100" min="0"></label><button class="btn">Adicionar disciplina</button></form></details>{% for sub in report_subjects %}<details class="card"><summary>{{sub.school_year}} • {{sub.segment}} • {{sub.class_name}} — {{sub.name}} {% if not sub.active %}(desativada){% endif %}</summary><form method="post" action="{{url_for('edit_report_subject',subject_id=sub.id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><label>Disciplina<input name="name" value="{{sub.name}}" required></label><label>Ordem<input type="number" name="position" min="0" value="{{sub.position}}"></label><label>Estado<select name="active"><option value="1" {% if sub.active %}selected{% endif %}>Ativa</option><option value="0" {% if not sub.active %}selected{% endif %}>Desativada</option></select></label><button class="btn">Salvar</button></form></details>{% endfor %}</section><div id="seguranca" class="card admin-panel">
-    <h3>Segurança e dados</h3><p>As operações administrativas são registradas em auditoria. Configure HTTPS, backups, políticas de privacidade e retenção antes de cadastrar dados reais.</p></div>{% endblock %}
+    <h3>Segurança e dados</h3><p>As operações administrativas são registradas em auditoria. Configure HTTPS, backups, políticas de privacidade e retenção antes de cadastrar dados reais.</p></div>
+<script>
+function pesquisarAlunos(texto) {
+    const termo = texto.toLocaleLowerCase('pt-BR')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+
+    let encontrados = 0;
+
+    document.querySelectorAll('[data-segmento]').forEach(grupo => {
+        let encontradosNoGrupo = 0;
+
+        grupo.querySelectorAll('.aluno-pesquisavel').forEach(aluno => {
+            const dados = (aluno.dataset.pesquisa || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '');
+
+            const corresponde = !termo || dados.includes(termo);
+
+            aluno.hidden = !corresponde;
+            aluno.style.display = corresponde ? '' : 'none';
+
+            if (corresponde) {
+                encontrados++;
+                encontradosNoGrupo++;
+            }
+        });
+
+        if (termo) {
+            grupo.hidden = encontradosNoGrupo === 0;
+            grupo.style.display = encontradosNoGrupo ? '' : 'none';
+            grupo.open = encontradosNoGrupo > 0;
+        } else {
+            grupo.hidden = false;
+            grupo.style.display = '';
+            grupo.open = false;
+        }
+    });
+
+    document.getElementById('resultado-pesquisa').textContent =
+        termo ? `${encontrados} aluno(s) encontrado(s)` : '';
+}
+</script>
+{% endblock %}
