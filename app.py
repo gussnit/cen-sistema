@@ -572,10 +572,19 @@ def admin():
     students = db().execute(
     'SELECT * FROM students ORDER BY name'
 ).fetchall()
+    total_alunos = len(students)
+
+    alunos_ativos = sum(
+        1 for aluno in students if aluno['active']
+    )
+
+    alunos_inativos = total_alunos - alunos_ativos
 
     guardians = db().execute(
         "SELECT * FROM users WHERE role='responsavel' ORDER BY name"
     ).fetchall()
+
+    total_responsaveis = len(guardians)
 
     guardian_links = db().execute(
         """SELECT g.student_id, g.user_id, u.name AS guardian_name
@@ -598,6 +607,10 @@ def admin():
 
     return render_template(
         'admin.html',
+        total_alunos=total_alunos,
+        total_responsaveis=total_responsaveis,
+        alunos_ativos=alunos_ativos,
+        alunos_inativos=alunos_inativos,
         students=students,
         guardians=guardians,
         student_guardians=student_guardians,
