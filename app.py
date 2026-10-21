@@ -706,6 +706,7 @@ def admin():
         alunos_inativos=alunos_inativos,
         
         pagamentos_admin=pagamentos_admin,
+        pagamentos_filtrados=pagamentos_filtrados,
         boletos_pagos=boletos_pagos,
         boletos_pendentes=boletos_pendentes,
         boletos_vencidos=boletos_vencidos,
