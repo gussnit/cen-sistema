@@ -67,6 +67,26 @@
 
 </div>
 
+<!-- EXPORTAR HISTÓRICO FINANCEIRO EM PDF -->
+<div style="
+    display: flex;
+    justify-content: center;
+    margin: 18px 0;
+">
+    <a
+        class="btn"
+        href="{{ url_for('historico_financeiro_pdf', sid=s.id, ano=year) }}"
+        style="
+            display: inline-block;
+            text-decoration: none;
+            text-align: center;
+        "
+    >
+        📄 Exportar histórico financeiro em PDF
+    </a>
+</div>
+<!-- FIM DA EXPORTAÇÃO -->
+
 <!-- RELAÇÃO DAS MENSALIDADES -->
 <div class="card">
     <h2>Mensalidades de {{ year }}</h2>
