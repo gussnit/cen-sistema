@@ -62,8 +62,13 @@
             <tbody>
                 {% for registro in registros %}
                 <tr>
+                    
                     <td>
-                        {{ registro.created_at[:19] }}
+                        {% set data = registro.created_at[:10] %}
+                        {% set hora = registro.created_at[11:19] %}
+
+                        {{ data[8:10] }}/{{ data[5:7] }}/{{ data[0:4] }}
+                        às {{ hora }}
                     </td>
 
                     <td>
