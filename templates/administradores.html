@@ -1,0 +1,64 @@
+
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h1>👥 Administradores</h1>
+
+<p class="muted">
+    Gerenciamento dos administradores do CEN.
+</p>
+
+<div style="margin: 20px 0;">
+    <a href="{{ url_for('admin') }}" class="btn">
+        ← Voltar à Administração
+    </a>
+</div>
+
+<div class="card">
+    <h2>🔐 Administradores cadastrados</h2>
+
+    <div style="overflow-x:auto;">
+        <table style="width:100%;">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>E-mail</th>
+                    <th>Situação</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for administrador in administradores %}
+                <tr>
+                    <td>
+                        {{ administrador.name }}
+
+                        {% if administrador.id == me.id %}
+                            <strong>(Você)</strong>
+                        {% endif %}
+                    </td>
+
+                    <td>{{ administrador.email }}</td>
+
+                    <td>
+                        {% if administrador.active %}
+                            🟢 Ativo
+                        {% else %}
+                            🔴 Inativo
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3">
+                        Nenhum administrador cadastrado.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
