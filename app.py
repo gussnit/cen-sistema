@@ -1464,7 +1464,8 @@ def minha_conta_admin():
 
     return render_template(
         'minha_conta.html',
-        administradores=administradores
+        administradores=administradores,
+        me=current_user()
     )
 
 @app.get('/admin/administradores')
