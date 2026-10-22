@@ -15,6 +15,59 @@
     </a>
 </div>
 
+<div class="card" style="margin-bottom:20px;">
+    <h2>➕ Cadastrar novo administrador</h2>
+
+    <p class="muted">
+        Cadastre uma pessoa autorizada a administrar o portal CEN.
+    </p>
+
+    <form method="POST"
+          action="{{ url_for('criar_administrador') }}">
+
+        <input type="hidden"
+               name="csrf_token"
+               value="{{ csrf_token() }}">
+
+        <div style="margin-bottom:15px;">
+            <label for="admin-name">Nome completo</label>
+            <input type="text"
+                   id="admin-name"
+                   name="name"
+                   maxlength="150"
+                   autocomplete="name"
+                   required>
+        </div>
+
+        <div style="margin-bottom:15px;">
+            <label for="admin-email">E-mail</label>
+            <input type="email"
+                   id="admin-email"
+                   name="email"
+                   maxlength="255"
+                   autocomplete="email"
+                   required>
+        </div>
+
+        <div style="margin-bottom:15px;">
+            <label for="admin-password">Senha inicial</label>
+            <input type="password"
+                   id="admin-password"
+                   name="password"
+                   minlength="12"
+                   autocomplete="new-password"
+                   required>
+            <p class="muted">
+                A senha deve ter pelo menos 12 caracteres.
+            </p>
+        </div>
+
+        <button type="submit" class="btn">
+            ➕ Cadastrar Administrador
+        </button>
+    </form>
+</div>
+
 <div class="card">
     <h2>🔐 Administradores cadastrados</h2>
 
