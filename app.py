@@ -1346,6 +1346,11 @@ def alterar_situacao_administrador(uid):
 
     return redirect(url_for('listar_administradores'))
 
+@app.get('/admin/minha-conta')
+@superadmin_required
+def minha_conta_admin():
+    return render_template('minha_conta.html')
+
 @app.get('/admin/administradores')
 @superadmin_required
 def listar_administradores():
