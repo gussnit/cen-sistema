@@ -1346,6 +1346,58 @@ def alterar_situacao_administrador(uid):
 
     return redirect(url_for('listar_administradores'))
 
+@app.post('/admin/administradores/<int:uid>/alterar-email')
+@superadmin_required
+def alterar_email_admin(uid):
+    novo_email = request.form.get(
+        'novo_email', ''
+    ).strip().lower()
+
+    senha_atual = request.form.get('senha_atual', '')
+
+    if (
+        not novo_email
+        or len(novo_email) > 255
+        or '@' not in novo_email
+    ):
+        flash('Informe um e-mail válido.', 'error')
+        return redirect(url_for('minha_conta_admin'))
+
+    if not check_password_hash(
+        current_user()['password_hash'],
+        senha_atual
+    ):
+        flash('Senha do SUPER ADMINISTRADOR incorreta.', 'error')
+        return redirect(url_for('minha_conta_admin'))
+
+    administrador = db().execute(
+        "SELECT id FROM users WHERE id=? AND role='admin'",
+        (uid,)
+    ).fetchone()
+
+    if not administrador:
+        abort(404)
+
+    existente = db().execute(
+        'SELECT id FROM users WHERE LOWER(email)=? AND id<>?',
+        (novo_email, uid)
+    ).fetchone()
+
+    if existente:
+        flash('Este e-mail já está cadastrado.', 'error')
+        return redirect(url_for('minha_conta_admin'))
+
+    db().execute(
+        'UPDATE users SET email=? WHERE id=?',
+        (novo_email, uid)
+    )
+
+    audit('alterar_email', 'administrador', uid)
+    db().commit()
+
+    flash('E-mail atualizado com sucesso!', 'success')
+    return redirect(url_for('minha_conta_admin'))
+
 @app.get('/admin/minha-conta')
 @superadmin_required
 def minha_conta_admin():
