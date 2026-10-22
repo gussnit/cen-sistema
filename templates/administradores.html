@@ -115,9 +115,44 @@
                     </td>
                   
 <td>
-    {% if administrador.is_superadmin %}
-        <strong>👑 Protegido</strong>
+    
+{% if administrador.is_superadmin %}
+
+    {% if administrador.id == 1 %}
+        <strong>👑 Principal protegido</strong>
+
+    {% elif administrador.id == me.id %}
+        <strong>👑 Sua conta</strong>
+
     {% else %}
+        <form method="POST"
+              action="{{ url_for('rebaixar_administrador', uid=administrador.id) }}"
+              onsubmit="return confirm('Confirma a remoção dos privilégios de SUPER ADMINISTRADOR? A conta continuará ativa como Administrador Auxiliar.');">
+
+            <input type="hidden"
+                   name="csrf_token"
+                   value="{{ csrf_token() }}">
+
+            <label for="senha-rebaixar-{{ administrador.id }}">
+                Senha do SUPER ADMINISTRADOR
+            </label>
+
+            <input type="password"
+                   id="senha-rebaixar-{{ administrador.id }}"
+                   name="senha_atual"
+                   autocomplete="current-password"
+                   required>
+
+            <button type="submit"
+                    class="btn"
+                    style="margin-top:8px; background:#b45309;">
+                👤 Remover privilégios
+            </button>
+        </form>
+    {% endif %}
+
+{% else %}
+
 
         <form method="POST"
               action="{{ url_for('alterar_situacao_administrador', uid=administrador.id) }}"
