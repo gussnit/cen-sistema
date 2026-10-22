@@ -254,18 +254,13 @@ def current_user():
 def context():
     me = current_user()
 
-    principal_id = os.environ.get(
-        'SUPERADMIN_USER_ID', ''
-    ).strip()
-
     is_superadmin = (
         me is not None
         and me['role'] == 'admin'
-        and principal_id.isdigit()
-        and me['id'] == int(principal_id)
+        and bool(me['is_superadmin'])
     )
 
-    return {
+return {
         'me': me,
         'today': date.today().isoformat(),
         'selected_student_id': session.get('selected_student_id'),
