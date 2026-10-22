@@ -1259,6 +1259,41 @@ def historico_alteracoes():
         ano_selecionado=ano
     )
 
+@app.post('/admin/administradores/criar')
+@superadmin_required
+def criar_administrador():
+    nome = value('name', 150)
+    email = value('email', 255).lower()
+    senha = request.form.get('password', '')
+
+    if not nome or not email or len(senha) < 12:
+        flash(
+            'Preencha nome, e-mail e senha com pelo menos 12 caracteres.',
+            'error'
+        )
+        return redirect(url_for('listar_administradores'))
+
+    if db().execute(
+        'SELECT id FROM users WHERE email=?',
+        (email,)
+    ).fetchone():
+        flash('Este e-mail já está cadastrado.', 'error')
+        return redirect(url_for('listar_administradores'))
+
+    novo = db().execute(
+        """
+        INSERT INTO users(name,email,password_hash,role)
+        VALUES(?,?,?,'admin')
+        """,
+        (nome, email, generate_password_hash(senha))
+    )
+
+    audit('criar', 'administrador', novo.lastrowid)
+    db().commit()
+
+    flash('Administrador cadastrado com sucesso!', 'success')
+    return redirect(url_for('listar_administradores'))
+
 @app.get('/admin/administradores')
 @superadmin_required
 def listar_administradores():
