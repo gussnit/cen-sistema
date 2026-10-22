@@ -85,13 +85,24 @@
             <tbody>
                 {% for administrador in administradores %}
                 <tr>
-                    <td>
-                        {{ administrador.name }}
+                   
+<td>
+    {{ administrador.name }}
 
-                        {% if administrador.id == me.id %}
-                            <strong>(Você)</strong>
-                        {% endif %}
-                    </td>
+    {% if administrador.is_superadmin %}
+        <div style="margin-top:6px; color:#9a6700; font-weight:bold;">
+            👑 SUPER ADMINISTRADOR
+        </div>
+    {% else %}
+        <div style="margin-top:6px; color:#64748b;">
+            👤 ADMINISTRADOR AUXILIAR
+        </div>
+    {% endif %}
+
+    {% if administrador.id == me.id %}
+        <strong>(Você)</strong>
+    {% endif %}
+</td>
 
                     <td>{{ administrador.email }}</td>
 
