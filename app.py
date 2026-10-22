@@ -1463,6 +1463,60 @@ def minha_conta_admin():
         me=current_user()
     )
 
+@app.post('/admin/administradores/<int:uid>/promover')
+@superadmin_required
+def promover_administrador(uid):
+    senha_atual = request.form.get('senha_atual', '')
+
+    usuario = current_user()
+
+    if not usuario or not check_password_hash(
+        usuario['password_hash'],
+        senha_atual
+    ):
+        flash('Senha do SUPER ADMINISTRADOR incorreta.', 'error')
+        return redirect(url_for('listar_administradores'))
+
+    administrador = db().execute(
+        """
+        SELECT id, name, active, is_superadmin
+        FROM users
+        WHERE id=? AND role='admin'
+        """,
+        (uid,)
+    ).fetchone()
+
+    if not administrador:
+        abort(404)
+
+    if not administrador['active']:
+        flash('Ative o administrador antes de promovê-lo.', 'error')
+        return redirect(url_for('listar_administradores'))
+
+    if administrador['is_superadmin']:
+        flash('Este usuário já é SUPER ADMINISTRADOR.', 'error')
+        return redirect(url_for('listar_administradores'))
+
+    db().execute(
+        """
+        UPDATE users
+        SET is_superadmin=TRUE
+        WHERE id=? AND role='admin'
+          AND active=1 AND is_superadmin=FALSE
+        """,
+        (uid,)
+    )
+
+    audit('promover_superadmin', 'administrador', uid)
+    db().commit()
+
+    flash(
+        'Administrador promovido a SUPER ADMINISTRADOR com sucesso!',
+        'success'
+    )
+
+    return redirect(url_for('listar_administradores'))
+
 @app.get('/admin/administradores')
 @superadmin_required
 def listar_administradores():
