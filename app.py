@@ -295,21 +295,16 @@ def admin_required(fn):
         return fn(*a,**kw)
     return inner
 
-def superadmin_required(fn):
-    @wraps(fn)
+def superadmin_required(f):
+    @wraps(f)
     @admin_required
     def inner(*args, **kwargs):
-        principal_id = os.environ.get(
-            'SUPERADMIN_USER_ID', ''
-        ).strip()
+        usuario = current_user()
 
-        if not principal_id.isdigit():
+        if not usuario or not usuario['is_superadmin']:
             abort(403)
 
-        if current_user()['id'] != int(principal_id):
-            abort(403)
-
-        return fn(*args, **kwargs)
+        return f(*args, **kwargs)
 
     return inner
 
