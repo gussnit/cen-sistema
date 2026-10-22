@@ -249,11 +249,33 @@ def private_file(kind, filename):
 def current_user():
     if 'uid' not in session:return None
     return db().execute('SELECT * FROM users WHERE id=? AND active=1',(session['uid'],)).fetchone()
+
 @app.context_processor
 def context():
     me = current_user()
-    return {'me': me, 'today': date.today().isoformat(), 'selected_student_id':session.get('selected_student_id'),
-            'nav_students': allowed_students() if me and me['role'] == 'responsavel' else [], 'unread_count': unread_count() if me and me['role']=='responsavel' else 0}
+
+    principal_id = os.environ.get(
+        'SUPERADMIN_USER_ID', ''
+    ).strip()
+
+    is_superadmin = (
+        me is not None
+        and me['role'] == 'admin'
+        and principal_id.isdigit()
+        and me['id'] == int(principal_id)
+    )
+
+    return {
+        'me': me,
+        'today': date.today().isoformat(),
+        'selected_student_id': session.get('selected_student_id'),
+        'nav_students': allowed_students()
+            if me and me['role'] == 'responsavel' else [],
+        'unread_count': unread_count()
+            if me and me['role'] == 'responsavel' else 0,
+        'is_superadmin': is_superadmin
+    }
+
 def login_required(fn):
     @wraps(fn)
     def inner(*a,**kw):
