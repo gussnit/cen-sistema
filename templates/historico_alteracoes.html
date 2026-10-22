@@ -1,0 +1,102 @@
+
+{% extends 'base.html' %}
+{% block content %}
+
+<a href="{{ url_for('admin') }}">‹ Voltar à administração</a>
+
+<h1>📋 Histórico de Alterações Administrativas</h1>
+
+<p class="muted">
+    Consulte as ações registradas no Portal CEN.
+    Exibindo até 200 registros, dos mais recentes aos mais antigos.
+</p>
+
+<style>
+    .historico-tabela {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .historico-tabela th,
+    .historico-tabela td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .historico-tabela th {
+        background: #f1f5f9;
+        color: #334155;
+    }
+
+    .historico-tabela tr:hover {
+        background: #f8fafc;
+    }
+
+    .historico-etiqueta {
+        display: inline-block;
+        padding: 5px 10px;
+        border-radius: 8px;
+        background: #e8eefc;
+        color: #344b9b;
+        font-weight: 600;
+        font-size: 13px;
+    }
+</style>
+
+<div class="card">
+    <h2>🔐 Registros de atividades</h2>
+
+    <div style="overflow-x: auto;">
+        <table class="historico-tabela">
+            <thead>
+                <tr>
+                    <th>Data e hora</th>
+                    <th>Usuário</th>
+                    <th>Ação</th>
+                    <th>Tipo de registro</th>
+                    <th>ID afetado</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for registro in registros %}
+                <tr>
+                    <td>
+                        {{ registro.created_at[:19] }}
+                    </td>
+
+                    <td>
+                        Usuário #{{ registro.actor_id }}
+                    </td>
+
+                    <td>
+                        <span class="historico-etiqueta">
+                            {{ registro.action }}
+                        </span>
+                    </td>
+
+                    <td>{{ registro.entity }}</td>
+
+                    <td>
+                        {{ registro.entity_id if registro.entity_id is not none else '—' }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align:center; padding:25px;">
+                        Nenhuma alteração registrada até o momento.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<p class="muted">
+    Os registros apresentados correspondem às ações
+    que foram gravadas no sistema de auditoria.
+</p>
+
+{% endblock %}
