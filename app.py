@@ -415,7 +415,9 @@ def upload_home_banner():
 def login():
     if request.method == 'POST':
         u = db().execute(
-            'SELECT * FROM users WHERE email=? AND active=1',
+            
+'SELECT * FROM users WHERE email=? AND active=1 AND deleted_at IS NULL',
+
             (value('email').lower(),)
         ).fetchone()
 
