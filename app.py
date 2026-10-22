@@ -1398,6 +1398,58 @@ def alterar_email_admin(uid):
     flash('E-mail atualizado com sucesso!', 'success')
     return redirect(url_for('minha_conta_admin'))
 
+@app.post('/admin/administradores/<int:uid>/alterar-senha')
+@superadmin_required
+def alterar_senha_admin(uid):
+    senha_atual = request.form.get('senha_atual', '')
+    nova_senha = request.form.get('nova_senha', '')
+    confirmar_senha = request.form.get('confirmar_senha', '')
+
+    superadmin = current_user()
+
+    if not superadmin or not check_password_hash(
+        superadmin['password_hash'],
+        senha_atual
+    ):
+        flash('Senha do SUPER ADMINISTRADOR incorreta.', 'error')
+        return redirect(url_for('minha_conta_admin'))
+
+    administrador = db().execute(
+        "SELECT id, password_hash FROM users WHERE id=? AND role='admin'",
+        (uid,)
+    ).fetchone()
+
+    if not administrador:
+        abort(404)
+
+    if len(nova_senha) < 8:
+        flash('A nova senha deve ter pelo menos 8 caracteres.', 'error')
+        return redirect(url_for('minha_conta_admin'))
+
+    if nova_senha != confirmar_senha:
+        flash('As novas senhas não coincidem.', 'error')
+        return redirect(url_for('minha_conta_admin'))
+
+    if check_password_hash(
+        administrador['password_hash'],
+        nova_senha
+    ):
+        flash('A nova senha deve ser diferente da senha atual.', 'error')
+        return redirect(url_for('minha_conta_admin'))
+
+    novo_hash = generate_password_hash(nova_senha)
+
+    db().execute(
+        'UPDATE users SET password_hash=? WHERE id=?',
+        (novo_hash, uid)
+    )
+
+    audit('alterar_senha', 'administrador', uid)
+    db().commit()
+
+    flash('Senha do administrador atualizada com sucesso!', 'success')
+    return redirect(url_for('minha_conta_admin'))
+
 @app.get('/admin/minha-conta')
 @superadmin_required
 def minha_conta_admin():
