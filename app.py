@@ -1168,11 +1168,31 @@ def relatorio_financeiro_pdf():
         download_name='CEN_Relatorio_Inadimplencia.pdf'
     )
 
+
 @app.get('/admin/historico-alteracoes')
 @admin_required
 def historico_alteracoes():
-    registros = db().execute(
-        """
+    mes = request.args.get('mes', '').strip()
+    ano = request.args.get('ano', '').strip()
+
+    if mes and (not mes.isdigit() or not 1 <= int(mes) <= 12):
+        abort(400)
+
+    if ano and (not ano.isdigit() or not 1900 <= int(ano) <= 2100):
+        abort(400)
+
+    filtros = []
+    parametros = []
+
+    if mes:
+        filtros.append("SUBSTR(a.created_at, 6, 2) = ?")
+        parametros.append(f"{int(mes):02d}")
+
+    if ano:
+        filtros.append("SUBSTR(a.created_at, 1, 4) = ?")
+        parametros.append(ano)
+
+    sql = """
         SELECT
             a.id,
             a.actor_id,
@@ -1181,14 +1201,22 @@ def historico_alteracoes():
             a.entity_id,
             a.created_at
         FROM audit a
-        ORDER BY a.id DESC
-        LIMIT 200
-        """
+    """
+
+    if filtros:
+        sql += " WHERE " + " AND ".join(filtros)
+
+    sql += " ORDER BY a.id DESC LIMIT 200"
+
+    registros = db().execute(
+        sql, tuple(parametros)
     ).fetchall()
 
     return render_template(
         'historico_alteracoes.html',
-        registros=registros
+        registros=registros,
+        mes_selecionado=mes,
+        ano_selecionado=ano
     )
 
 @app.get('/admin')
