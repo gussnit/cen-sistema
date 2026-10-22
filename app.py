@@ -1297,28 +1297,32 @@ def criar_administrador():
 @app.post('/admin/administradores/<int:uid>/situacao')
 @superadmin_required
 def alterar_situacao_administrador(uid):
-    principal_id = os.environ.get(
-        'SUPERADMIN_USER_ID', ''
-    ).strip()
-
-    if not principal_id.isdigit():
-        abort(403)
-
-    if uid == int(principal_id):
-        abort(403, 'O administrador principal não pode ser desativado.')
-
     administrador = db().execute(
-        "SELECT id, active FROM users WHERE id=? AND role='admin'",
+        """
+        SELECT id, active, is_superadmin
+        FROM users
+        WHERE id=? AND role='admin'
+        """,
         (uid,)
     ).fetchone()
 
     if not administrador:
         abort(404)
 
+    if administrador['is_superadmin']:
+        abort(
+            403,
+            'Super administradores não podem ser desativados por esta função.'
+        )
+
     nova_situacao = 0 if administrador['active'] else 1
 
     db().execute(
-        "UPDATE users SET active=? WHERE id=? AND role='admin'",
+        """
+        UPDATE users
+        SET active=?
+        WHERE id=? AND role='admin' AND is_superadmin=FALSE
+        """,
         (nova_situacao, uid)
     )
 
