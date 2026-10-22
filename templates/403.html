@@ -1,0 +1,38 @@
+
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="card"
+     style="max-width:600px; margin:50px auto;
+            padding:40px 25px; text-align:center;">
+
+    <div style="font-size:65px; margin-bottom:15px;">
+        🔐
+    </div>
+
+    <h1 style="color:#344b9b; margin-bottom:15px;">
+        Acesso não autorizado
+    </h1>
+
+    <p style="font-size:17px; line-height:1.7;">
+        Você não possui permissão para acessar
+        esta área do Portal CEN.
+    </p>
+
+    <p class="muted">
+        Se precisar de acesso, entre em contato
+        com o administrador principal.
+    </p>
+
+    <div style="margin-top:30px;">
+        <a href="{{ url_for('admin') if me and me.role == 'admin' else url_for('home') }}"
+           class="btn"
+           style="display:inline-block; text-decoration:none;">
+            ← Voltar ao painel
+        </a>
+    </div>
+
+</div>
+
+{% endblock %}
