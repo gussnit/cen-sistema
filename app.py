@@ -1464,7 +1464,7 @@ def minha_conta_admin():
 def listar_administradores():
     administradores = db().execute(
         """
-        SELECT id, name, email, active
+        SELECT id, name, email, active, is_superadmin
         FROM users
         WHERE role = 'admin'
         ORDER BY name
