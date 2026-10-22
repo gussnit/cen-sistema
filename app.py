@@ -1349,7 +1349,19 @@ def alterar_situacao_administrador(uid):
 @app.get('/admin/minha-conta')
 @superadmin_required
 def minha_conta_admin():
-    return render_template('minha_conta.html')
+    administradores = db().execute(
+        """
+        SELECT id, name, email, active
+        FROM users
+        WHERE role = 'admin'
+        ORDER BY name
+        """
+    ).fetchall()
+
+    return render_template(
+        'minha_conta.html',
+        administradores=administradores
+    )
 
 @app.get('/admin/administradores')
 @superadmin_required
