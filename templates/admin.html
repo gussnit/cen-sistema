@@ -1,5 +1,16 @@
 {% extends 'base.html' %}{% block content %}<h1>⚙ Administração</h1><p class="muted">Gestão dos alunos, responsáveis e informações escolares.</p>
 
+{% if me and me.role == 'admin' and
+      me.id == config.get('SUPERADMIN_USER_ID', 0)|int %}
+<div style="text-align:center; margin:18px 0;">
+    <a href="{{ url_for('listar_administradores') }}"
+       class="btn"
+       style="display:inline-block; text-decoration:none;">
+        👥 Gerenciar Administradores
+    </a>
+</div>
+{% endif %}
+
 <!-- BOTÃO HISTÓRICO DE ALTERAÇÕES -->
 <div style="text-align:center; margin:18px 0;">
     <a
