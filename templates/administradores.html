@@ -113,11 +113,12 @@
                             🔴 Inativo
                         {% endif %}
                     </td>
-                    
+                  
 <td>
-    {% if administrador.id == me.id %}
+    {% if administrador.is_superadmin %}
         <strong>👑 Protegido</strong>
     {% else %}
+
         <form method="POST"
               action="{{ url_for('alterar_situacao_administrador', uid=administrador.id) }}"
               onsubmit="return confirm('Confirma a alteração da situação deste administrador?');">
@@ -138,6 +139,35 @@
                 </button>
             {% endif %}
         </form>
+
+        {% if administrador.active %}
+            <form method="POST"
+                  action="{{ url_for('promover_administrador', uid=administrador.id) }}"
+                  style="margin-top:12px;"
+                  onsubmit="return confirm('ATENÇÃO: este administrador terá acesso completo ao CEN, inclusive para cadastrar outros SUPER ADMINISTRADORES. Confirma a promoção?');">
+
+                <input type="hidden"
+                       name="csrf_token"
+                       value="{{ csrf_token() }}">
+
+                <label for="senha-promocao-{{ administrador.id }}">
+                    Senha do SUPER ADMINISTRADOR
+                </label>
+
+                <input type="password"
+                       id="senha-promocao-{{ administrador.id }}"
+                       name="senha_atual"
+                       autocomplete="current-password"
+                       required>
+
+                <button type="submit"
+                        class="btn"
+                        style="margin-top:8px; background:#9a6700;">
+                    👑 Tornar SUPER ADMINISTRADOR
+                </button>
+            </form>
+        {% endif %}
+
     {% endif %}
 </td>
 
