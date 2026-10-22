@@ -1294,6 +1294,49 @@ def criar_administrador():
     flash('Administrador cadastrado com sucesso!', 'success')
     return redirect(url_for('listar_administradores'))
 
+@app.post('/admin/administradores/<int:uid>/situacao')
+@superadmin_required
+def alterar_situacao_administrador(uid):
+    principal_id = os.environ.get(
+        'SUPERADMIN_USER_ID', ''
+    ).strip()
+
+    if not principal_id.isdigit():
+        abort(403)
+
+    if uid == int(principal_id):
+        abort(403, 'O administrador principal não pode ser desativado.')
+
+    administrador = db().execute(
+        "SELECT id, active FROM users WHERE id=? AND role='admin'",
+        (uid,)
+    ).fetchone()
+
+    if not administrador:
+        abort(404)
+
+    nova_situacao = 0 if administrador['active'] else 1
+
+    db().execute(
+        "UPDATE users SET active=? WHERE id=? AND role='admin'",
+        (nova_situacao, uid)
+    )
+
+    audit(
+        'ativar' if nova_situacao else 'desativar',
+        'administrador',
+        uid
+    )
+
+    db().commit()
+
+    flash(
+        'Situação do administrador atualizada com sucesso!',
+        'success'
+    )
+
+    return redirect(url_for('listar_administradores'))
+
 @app.get('/admin/administradores')
 @superadmin_required
 def listar_administradores():
