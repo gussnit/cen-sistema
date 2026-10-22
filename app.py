@@ -260,7 +260,8 @@ def context():
         and bool(me['is_superadmin'])
     )
 
-return {
+    return {
+
         'me': me,
         'today': date.today().isoformat(),
         'selected_student_id': session.get('selected_student_id'),
