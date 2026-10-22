@@ -6,6 +6,67 @@
 
 <h1>📋 Histórico de Alterações Administrativas</h1>
 
+<!-- FILTROS DO HISTÓRICO -->
+<form method="GET"
+      action="{{ url_for('historico_alteracoes') }}"
+      style="display:flex; flex-wrap:wrap; gap:12px;
+             align-items:end; margin:20px 0;">
+
+    <div>
+        <label for="filtro-mes">Mês</label>
+        <select id="filtro-mes" name="mes">
+            <option value="">Todos os meses</option>
+            {% for numero, nome in [
+                (1, 'Janeiro'),
+                (2, 'Fevereiro'),
+                (3, 'Março'),
+                (4, 'Abril'),
+                (5, 'Maio'),
+                (6, 'Junho'),
+                (7, 'Julho'),
+                (8, 'Agosto'),
+                (9, 'Setembro'),
+                (10, 'Outubro'),
+                (11, 'Novembro'),
+                (12, 'Dezembro')
+            ] %}
+            <option value="{{ numero }}"
+                {% if mes_selecionado|int == numero and mes_selecionado %}
+                    selected
+                {% endif %}>
+                {{ nome }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div>
+        <label for="filtro-ano">Ano</label>
+        <select id="filtro-ano" name="ano">
+            <option value="">Todos os anos</option>
+            {% for ano in range(2026, 2031) %}
+            <option value="{{ ano }}"
+                {% if ano_selecionado == ano|string %}
+                    selected
+                {% endif %}>
+                {{ ano }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <button type="submit" class="btn">
+        🔎 Filtrar alterações
+    </button>
+
+    <a href="{{ url_for('historico_alteracoes') }}"
+       class="btn"
+       style="text-decoration:none;">
+        Limpar filtros
+    </a>
+</form>
+<!-- FIM DOS FILTROS -->
+
 <div class="historico-acoes">
     <button type="button"
             class="btn"
