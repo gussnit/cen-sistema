@@ -4,6 +4,57 @@
 
 <a href="{{ url_for('admin') }}">‹ Voltar à administração</a>
 
+<!-- CABEÇALHO EXCLUSIVO DA IMPRESSÃO -->
+<div id="cabecalho-impressao-historico"
+     style="display:none;">
+
+    <h2>CEN – CENTRO EDUCACIONAL DE NITERÓI</h2>
+
+    <h3>HISTÓRICO DE ALTERAÇÕES ADMINISTRATIVAS</h3>
+
+    <p id="periodo-impressao-historico"></p>
+
+    <p id="data-impressao-historico"></p>
+
+    <hr>
+</div>
+
+<script>
+window.addEventListener('beforeprint', function () {
+    const meses = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril',
+        'Maio', 'Junho', 'Julho', 'Agosto',
+        'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+
+    const parametros = new URLSearchParams(window.location.search);
+    const mes = parametros.get('mes');
+    const ano = parametros.get('ano');
+
+    let periodo = 'Período: Todos os registros';
+
+    if (mes && ano) {
+        periodo = 'Período: ' + meses[Number(mes) - 1] + ' de ' + ano;
+    } else if (mes) {
+        periodo = 'Período: ' + meses[Number(mes) - 1];
+    } else if (ano) {
+        periodo = 'Período: Ano de ' + ano;
+    }
+
+    document.getElementById('periodo-impressao-historico')
+        .textContent = periodo;
+
+    const agora = new Date();
+
+    document.getElementById('data-impressao-historico')
+        .textContent = 'Gerado em: ' +
+        agora.toLocaleString('pt-BR', {
+            dateStyle: 'short',
+            timeStyle: 'medium'
+        });
+});
+</script>
+
 <h1>📋 Histórico de Alterações Administrativas</h1>
 
 <!-- FILTROS DO HISTÓRICO -->
