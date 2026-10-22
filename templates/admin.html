@@ -1,4 +1,17 @@
 {% extends 'base.html' %}{% block content %}<h1>⚙ Administração</h1><p class="muted">Gestão dos alunos, responsáveis e informações escolares.</p>
+
+<!-- BOTÃO HISTÓRICO DE ALTERAÇÕES -->
+<div style="text-align:center; margin:18px 0;">
+    <a
+        href="{{ url_for('historico_alteracoes') }}"
+        class="btn"
+        style="display:inline-block; text-decoration:none;"
+    >
+        📋 Histórico de Alterações Administrativas
+    </a>
+</div>
+<!-- FIM DO BOTÃO -->
+
 <style>
 .admin-tabs {
     display: grid;
