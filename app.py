@@ -1168,6 +1168,29 @@ def relatorio_financeiro_pdf():
         download_name='CEN_Relatorio_Inadimplencia.pdf'
     )
 
+@app.get('/admin/historico-alteracoes')
+@admin_required
+def historico_alteracoes():
+    registros = db().execute(
+        """
+        SELECT
+            a.id,
+            a.actor_id,
+            a.action,
+            a.entity,
+            a.entity_id,
+            a.created_at
+        FROM audit a
+        ORDER BY a.id DESC
+        LIMIT 200
+        """
+    ).fetchall()
+
+    return render_template(
+        'historico_alteracoes.html',
+        registros=registros
+    )
+
 @app.get('/admin')
 @admin_required
 def admin():
