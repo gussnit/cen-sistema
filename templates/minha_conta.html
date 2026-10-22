@@ -1,0 +1,143 @@
+
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h1>🔐 Gerenciar Credenciais</h1>
+
+<p class="muted">
+    Área exclusiva do SUPER ADMINISTRADOR CEN.
+</p>
+
+<div class="card" style="margin-bottom:20px;">
+    <h2>👥 Administradores cadastrados</h2>
+
+    <p class="muted">
+        Selecione a conta que deseja atualizar.
+    </p>
+
+    <label for="selecionar-admin">Administrador</label>
+
+    <select id="selecionar-admin"
+            onchange="mostrarAdministrador(this.value)"
+            style="width:100%;">
+
+        <option value="">Selecione um administrador</option>
+
+        {% for administrador in administradores %}
+        <option value="{{ administrador.id }}">
+            {{ administrador.name }}
+            {% if administrador.id == me.id %}
+                (Você)
+            {% endif %}
+        </option>
+        {% endfor %}
+    </select>
+</div>
+
+{% for administrador in administradores %}
+
+<div class="card admin-credenciais"
+     id="credenciais-{{ administrador.id }}"
+     style="display:none; margin-bottom:20px;">
+
+    <h2>👤 {{ administrador.name }}</h2>
+
+    <p>
+        <strong>E-mail atual:</strong>
+        {{ administrador.email }}
+    </p>
+
+    <h3>📧 Alterar e-mail</h3>
+
+    <form method="POST"
+          action="{{ url_for('alterar_email_admin', uid=administrador.id) }}">
+
+        <input type="hidden"
+               name="csrf_token"
+               value="{{ csrf_token() }}">
+
+        <label>Novo e-mail</label>
+        <input type="email"
+               name="novo_email"
+               maxlength="255"
+               required>
+
+        <label>Senha do SUPER ADMINISTRADOR</label>
+        <input type="password"
+               name="senha_atual"
+               autocomplete="current-password"
+               required>
+
+        <button type="submit" class="btn"
+                style="margin-top:15px;">
+            📧 Atualizar e-mail
+        </button>
+    </form>
+
+    <hr style="margin:25px 0;">
+
+    <h3>🔑 Alterar senha</h3>
+
+    <form method="POST"
+          action="{{ url_for('alterar_senha_admin', uid=administrador.id) }}">
+
+        <input type="hidden"
+               name="csrf_token"
+               value="{{ csrf_token() }}">
+
+        <label>Nova senha</label>
+        <input type="password"
+               name="nova_senha"
+               minlength="8"
+               autocomplete="new-password"
+               required>
+
+        <label>Confirmar nova senha</label>
+        <input type="password"
+               name="confirmar_senha"
+               minlength="8"
+               autocomplete="new-password"
+               required>
+
+        <label>Senha do SUPER ADMINISTRADOR</label>
+        <input type="password"
+               name="senha_atual"
+               autocomplete="current-password"
+               required>
+
+        <button type="submit" class="btn"
+                style="margin-top:15px;">
+            🔑 Atualizar senha
+        </button>
+    </form>
+
+</div>
+
+{% endfor %}
+
+<div style="margin-top:20px;">
+    <a href="{{ url_for('listar_administradores') }}"
+       class="btn">
+        ← Voltar aos Administradores
+    </a>
+</div>
+
+<script>
+function mostrarAdministrador(id) {
+    document.querySelectorAll('.admin-credenciais')
+        .forEach(function(elemento) {
+            elemento.style.display = 'none';
+        });
+
+    if (id) {
+        var painel = document.getElementById('credenciais-' + id);
+
+        if (painel) {
+            painel.style.display = 'block';
+        }
+    }
+}
+</script>
+
+{% endblock %}
