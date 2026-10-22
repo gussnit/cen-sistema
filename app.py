@@ -1829,7 +1829,5 @@ def update_category(cid):
     return redirect(url_for('admin')+'#legendas')
 @app.errorhandler(PGIntegrityError)
 def integrity(_):db().rollback();flash('Registro duplicado ou dados inválidos.','error');return redirect(url_for('admin'))
-@app.errorhandler(403)
-def forbidden(_):return 'Acesso não autorizado.',403
 if __name__=='__main__':
     init_db();app.run(debug=os.getenv('FLASK_DEBUG')=='1')
