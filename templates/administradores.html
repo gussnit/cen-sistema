@@ -78,6 +78,7 @@
                     <th>Nome</th>
                     <th>E-mail</th>
                     <th>Situação</th>
+                    <th>Ações</th>
                 </tr>
             </thead>
 
@@ -101,10 +102,38 @@
                             🔴 Inativo
                         {% endif %}
                     </td>
+                    
+<td>
+    {% if administrador.id == me.id %}
+        <strong>👑 Protegido</strong>
+    {% else %}
+        <form method="POST"
+              action="{{ url_for('alterar_situacao_administrador', uid=administrador.id) }}"
+              onsubmit="return confirm('Confirma a alteração da situação deste administrador?');">
+
+            <input type="hidden"
+                   name="csrf_token"
+                   value="{{ csrf_token() }}">
+
+            {% if administrador.active %}
+                <button type="submit" class="btn"
+                        style="background:#b42318;">
+                    🔴 Desativar
+                </button>
+            {% else %}
+                <button type="submit" class="btn"
+                        style="background:#16803c;">
+                    🟢 Ativar
+                </button>
+            {% endif %}
+        </form>
+    {% endif %}
+</td>
+
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="3">
+                    <td colspan="4">
                         Nenhum administrador cadastrado.
                     </td>
                 </tr>
