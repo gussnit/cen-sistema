@@ -268,6 +268,24 @@ def admin_required(fn):
         return fn(*a,**kw)
     return inner
 
+def superadmin_required(fn):
+    @wraps(fn)
+    @admin_required
+    def inner(*args, **kwargs):
+        principal_id = os.environ.get(
+            'SUPERADMIN_USER_ID', ''
+        ).strip()
+
+        if not principal_id.isdigit():
+            abort(403)
+
+        if current_user()['id'] != int(principal_id):
+            abort(403)
+
+        return fn(*args, **kwargs)
+
+    return inner
+
 def allowed_students():
     if current_user()['role']=='admin':return db().execute('SELECT * FROM students ORDER BY name').fetchall()
     return db().execute('SELECT s.* FROM students s JOIN guardians g ON g.student_id=s.id WHERE g.user_id=? AND s.active=1 ORDER BY s.name',(session['uid'],)).fetchall()
