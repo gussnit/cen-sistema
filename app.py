@@ -1463,6 +1463,92 @@ def minha_conta_admin():
         me=current_user()
     )
 
+@app.post('/admin/administradores/<int:uid>/rebaixar')
+@superadmin_required
+def rebaixar_administrador(uid):
+    principal_id = os.environ.get(
+        'SUPERADMIN_USER_ID', ''
+    ).strip()
+
+    if not principal_id.isdigit():
+        abort(403)
+
+    # O SUPER ADMINISTRADOR CEN é permanente.
+    if uid == int(principal_id):
+        abort(403)
+
+    usuario = current_user()
+    if uid == usuario['id']:
+        abort(403)
+
+    senha_atual = request.form.get('senha_atual', '')
+
+    if not check_password_hash(
+        usuario['password_hash'],
+        senha_atual
+    ):
+        flash('Senha do SUPER ADMINISTRADOR incorreta.', 'error')
+        return redirect(url_for('listar_administradores'))
+
+    # Serializa operações de rebaixamento.
+    db().execute(
+        'SELECT pg_advisory_xact_lock(74621001)'
+    )
+
+    administrador = db().execute(
+        """
+        SELECT id, is_superadmin
+        FROM users
+        WHERE id=? AND role='admin'
+        FOR UPDATE
+        """,
+        (uid,)
+    ).fetchone()
+
+    if not administrador:
+        abort(404)
+
+    if not administrador['is_superadmin']:
+        flash('Este usuário não é SUPER ADMINISTRADOR.', 'error')
+        return redirect(url_for('listar_administradores'))
+
+    quantidade = db().execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM users
+        WHERE role='admin'
+          AND active=1
+          AND is_superadmin=TRUE
+        """
+    ).fetchone()['total']
+
+    if quantidade <= 1:
+        flash(
+            'Não é possível remover o último SUPER ADMINISTRADOR ativo.',
+            'error'
+        )
+        return redirect(url_for('listar_administradores'))
+
+    db().execute(
+        """
+        UPDATE users
+        SET is_superadmin=FALSE
+        WHERE id=? AND role='admin'
+          AND is_superadmin=TRUE
+        """,
+        (uid,)
+    )
+
+    audit('remover_superadmin', 'administrador', uid)
+    db().commit()
+
+    flash(
+        'Privilégios de SUPER ADMINISTRADOR removidos com sucesso!',
+        'success'
+    )
+
+    return redirect(url_for('listar_administradores'))
+
 @app.post('/admin/administradores/<int:uid>/promover')
 @superadmin_required
 def promover_administrador(uid):
