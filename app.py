@@ -282,6 +282,11 @@ def login_required(fn):
         if not current_user():return redirect(url_for('login'))
         return fn(*a,**kw)
     return inner
+
+@app.errorhandler(403)
+def acesso_negado(error):
+    return render_template('403.html'), 403
+
 def admin_required(fn):
     @wraps(fn)
     @login_required
