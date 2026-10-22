@@ -1232,16 +1232,19 @@ def historico_alteracoes():
         filtros.append("SUBSTR(a.created_at, 1, 4) = ?")
         parametros.append(ano)
 
-    sql = """
-        SELECT
-            a.id,
-            a.actor_id,
-            a.action,
-            a.entity,
-            a.entity_id,
-            a.created_at
-        FROM audit a
-    """
+    
+sql = """
+    SELECT
+        a.id,
+        a.actor_id,
+        u.name AS actor_name,
+        a.action,
+        a.entity,
+        a.entity_id,
+        a.created_at
+    FROM audit a
+    LEFT JOIN users u ON u.id = a.actor_id
+"""
 
     if filtros:
         sql += " WHERE " + " AND ".join(filtros)
