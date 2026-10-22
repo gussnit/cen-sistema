@@ -314,7 +314,13 @@ window.addEventListener('beforeprint', function () {
                     </td>
 
                     <td>
-                        Usuário #{{ registro.actor_id }}
+                        
+{% if registro.actor_name %}
+    {{ registro.actor_name }}
+{% else %}
+    Usuário #{{ registro.actor_id }}
+{% endif %}
+
                     </td>
 
                     <td>
