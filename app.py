@@ -1266,9 +1266,9 @@ def criar_administrador():
     email = value('email', 255).lower()
     senha = request.form.get('password', '')
 
-    if not nome or not email or len(senha) < 12:
+    if not nome or not email or len(senha) < 8:
         flash(
-            'Preencha nome, e-mail e senha com pelo menos 12 caracteres.',
+            'Preencha nome, e-mail e senha com pelo menos 8 caracteres.',
             'error'
         )
         return redirect(url_for('listar_administradores'))
