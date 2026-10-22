@@ -1237,6 +1237,23 @@ def historico_alteracoes():
         ano_selecionado=ano
     )
 
+@app.get('/admin/administradores')
+@superadmin_required
+def listar_administradores():
+    administradores = db().execute(
+        """
+        SELECT id, name, email, active
+        FROM users
+        WHERE role = 'admin'
+        ORDER BY name
+        """
+    ).fetchall()
+
+    return render_template(
+        'administradores.html',
+        administradores=administradores
+    )
+
 @app.get('/admin')
 @admin_required
 def admin():
