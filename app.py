@@ -246,9 +246,21 @@ def private_file(kind, filename):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     return response
 
+
 def current_user():
-    if 'uid' not in session:return None
-    return db().execute('SELECT * FROM users WHERE id=? AND active=1',(session['uid'],)).fetchone()
+    if 'uid' not in session:
+        return None
+
+    return db().execute(
+        """
+        SELECT *
+        FROM users
+        WHERE id=?
+          AND active=1
+          AND deleted_at IS NULL
+        """,
+        (session['uid'],)
+    ).fetchone()
 
 @app.context_processor
 def context():
