@@ -1574,20 +1574,28 @@ def arquivar_administrador(uid):
             )
             return redirect(url_for('listar_administradores'))
 
-    db().execute(
-        """
-        UPDATE users
-        SET deleted_at=CURRENT_TIMESTAMP,
-            active=0,
-            is_superadmin=FALSE
-        WHERE id=? AND role='admin'
-          AND deleted_at IS NULL
-        """,
-        (uid,)
-    )
+    
+    try:
+        db().execute(
+            """
+            UPDATE users
+            SET deleted_at=CURRENT_TIMESTAMP,
+                active=0,
+                is_superadmin=FALSE
+            WHERE id=? AND role='admin'
+              AND deleted_at IS NULL
+            """,
+            (uid,)
+        )
 
-    audit('arquivar', 'administrador', uid)
-    db().commit()
+        audit('arquivar', 'administrador', uid)
+
+        db().commit()
+
+    except Exception:
+        db().rollback()
+        raise
+
 
     flash(
         'Administrador arquivado com sucesso! Histórico preservado.',
