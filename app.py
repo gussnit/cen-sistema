@@ -1723,23 +1723,28 @@ def rebaixar_administrador(uid):
         )
         return redirect(url_for('listar_administradores'))
 
-    
-    db().execute(
-        """
-        UPDATE users
-        SET is_superadmin=FALSE
-        WHERE id=?
-          AND role='admin'
-          AND is_superadmin=TRUE
-          AND deleted_at IS NULL
-          AND id<>1
-        """,
-        (uid,)
-    )
 
+    try:
+        db().execute(
+            """
+            UPDATE users
+            SET is_superadmin=FALSE
+            WHERE id=?
+              AND role='admin'
+              AND is_superadmin=TRUE
+              AND deleted_at IS NULL
+              AND id<>1
+            """,
+            (uid,)
+        )
 
-    audit('remover_superadmin', 'administrador', uid)
-    db().commit()
+        audit('remover_superadmin', 'administrador', uid)
+        db().commit()
+
+    except Exception:
+        db().rollback()
+        raise
+
 
     flash(
         'Privilégios de SUPER ADMINISTRADOR removidos com sucesso!',
