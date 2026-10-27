@@ -1479,6 +1479,100 @@ def minha_conta_admin():
         me=current_user()
     )
 
+
+@app.post('/admin/administradores/<int:uid>/arquivar')
+@superadmin_required
+def arquivar_administrador(uid):
+    usuario = current_user()
+
+    principal_id = os.environ.get(
+        'SUPERADMIN_USER_ID', ''
+    ).strip()
+
+    if not principal_id.isdigit():
+        abort(403)
+
+    # Nunca arquivar o SUPER ADMINISTRADOR CEN.
+    if uid == int(principal_id):
+        abort(403)
+
+    # Impedir que o usuário arquive a própria conta.
+    if uid == usuario['id']:
+        abort(403)
+
+    senha_atual = request.form.get('senha_atual', '')
+
+    if not check_password_hash(
+        usuario['password_hash'],
+        senha_atual
+    ):
+        flash('Senha do SUPER ADMINISTRADOR incorreta.', 'error')
+        return redirect(url_for('listar_administradores'))
+
+    # Serializar operações administrativas sensíveis.
+    db().execute(
+        'SELECT pg_advisory_xact_lock(74621001)'
+    )
+
+    administrador = db().execute(
+        """
+        SELECT id, name, active, is_superadmin, deleted_at
+        FROM users
+        WHERE id=? AND role='admin'
+        FOR UPDATE
+        """,
+        (uid,)
+    ).fetchone()
+
+    if not administrador:
+        abort(404)
+
+    if administrador['deleted_at'] is not None:
+        flash('Este administrador já está arquivado.', 'error')
+        return redirect(url_for('listar_administradores'))
+
+    # Preservar ao menos um SUPER ADMINISTRADOR ativo.
+    if administrador['is_superadmin'] and administrador['active']:
+        quantidade = db().execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM users
+            WHERE role='admin'
+              AND active=1
+              AND is_superadmin=TRUE
+              AND deleted_at IS NULL
+            """
+        ).fetchone()['total']
+
+        if quantidade <= 1:
+            flash(
+                'Não é possível arquivar o último SUPER ADMINISTRADOR ativo.',
+                'error'
+            )
+            return redirect(url_for('listar_administradores'))
+
+    db().execute(
+        """
+        UPDATE users
+        SET deleted_at=CURRENT_TIMESTAMP,
+            active=0,
+            is_superadmin=FALSE
+        WHERE id=? AND role='admin'
+          AND deleted_at IS NULL
+        """,
+        (uid,)
+    )
+
+    audit('arquivar', 'administrador', uid)
+    db().commit()
+
+    flash(
+        'Administrador arquivado com sucesso! Histórico preservado.',
+        'success'
+    )
+
+    return redirect(url_for('listar_administradores'))
+
 @app.post('/admin/administradores/<int:uid>/rebaixar')
 @superadmin_required
 def rebaixar_administrador(uid):
