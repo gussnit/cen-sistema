@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+.cen-admin-wrap{max-width:1050px;margin:auto}
+.cen-admin-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.cen-admin-card{background:#fff;border:1px solid #dce8e6;border-radius:16px;padding:20px;margin-bottom:15px;box-shadow:0 3px 12px rgba(15,45,55,.04)}
+.cen-admin-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.cen-admin-name{font-size:1.1rem;font-weight:750;color:#173447;margin:0 0 6px}
+.cen-admin-email{overflow-wrap:anywhere;color:#536a76;margin:0 0 10px}
+.cen-admin-tags{display:flex;flex-wrap:wrap;gap:7px}
+.cen-tag{display:inline-block;border-radius:100px;padding:5px 10px;font-size:.8rem;font-weight:700;background:#edf3f6;color:#37536a}
+.cen-tag.gold{background:#fff4d8;color:#8c5900}.cen-tag.green{background:#e8f7ee;color:#13723c}.cen-tag.red{background:#fdecea;color:#a42b23}
+.cen-admin-actions{display:flex;flex-wrap:wrap;align-items:flex-start;gap:9px;margin-top:17px;padding-top:14px;border-top:1px solid #edf0f2}
+.cen-action{border:1px solid #d9e1e5;border-radius:10px;min-width:190px;flex:1 1 210px;overflow:hidden;background:#fbfcfd}
+.cen-action summary{cursor:pointer;list-style:none;font-weight:700;padding:12px 13px;color:#234e64;user-select:none}
+.cen-action summary::-webkit-details-marker{display:none}
+.cen-action summary:after{content:'⌄';float:right}
+.cen-action[open] summary:after{content:'⌃'}
+.cen-action.danger summary{color:#aa2d26}.cen-action.gold summary{color:#946000}
+.cen-action form{padding:0 13px 13px}
+.cen-action label{display:block;font-size:.85rem;margin-bottom:6px}
+.cen-action input{width:100%;box-sizing:border-box;margin-bottom:10px}
+.cen-action button{width:100%;white-space:normal}
+.cen-admin-protected{margin-top:16px;color:#697983;font-weight:600}
+@media(max-width:580px){.cen-admin-card{padding:15px}.cen-action{flex-basis:100%}}
+</style>
+<div class="cen-admin-wrap">
+  <div class="cen-admin-top">
+    <div>
+      <h1>👥 Administradores</h1>
+      <p class="muted">Gerencie as contas autorizadas do CEN.</p>
+    </div>
+    <a href="{{ url_for('admin') }}" class="btn">← Voltar à Administração</a>
+  </div>
+
+  <div class="card" style="margin-bottom:22px;">
+    <details>
+      <summary style="cursor:pointer;font-weight:750;font-size:1.1rem;padding:5px 0;">➕ Cadastrar novo administrador</summary>
+      <p class="muted">Cadastre uma pessoa autorizada a administrar o portal CEN.</p>
+      <form method="POST" action="{{ url_for('criar_administrador') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div style="margin-bottom:14px;"><label for="admin-name">Nome completo</label><input type="text" id="admin-name" name="name" maxlength="150" autocomplete="name" required></div>
+        <div style="margin-bottom:14px;"><label for="admin-email">E-mail</label><input type="email" id="admin-email" name="email" maxlength="255" autocomplete="email" required></div>
+        <div style="margin-bottom:14px;"><label for="admin-password">Senha inicial</label><input type="password" id="admin-password" name="password" minlength="8" autocomplete="new-password" required><p class="muted">Mínimo de 8 caracteres.</p></div>
+        <button type="submit" class="btn">➕ Cadastrar administrador</button>
+      </form>
+    </details>
+  </div>
+
+  <h2 style="margin-bottom:14px;">🔐 Administradores cadastrados</h2>
+  {% for administrador in administradores %}
+    <section class="cen-admin-card">
+      <div class="cen-admin-head">
+        <div>
+          <h3 class="cen-admin-name">{{ administrador.name }} {% if administrador.id == me.id %}<span style="font-size:.85rem;">(Você)</span>{% endif %}</h3>
+          <p class="cen-admin-email">{{ administrador.email }}</p>
+          <div class="cen-admin-tags">
+            {% if administrador.is_superadmin %}<span class="cen-tag gold">👑 SUPER ADMINISTRADOR</span>{% else %}<span class="cen-tag">👤 ADMINISTRADOR AUXILIAR</span>{% endif %}
+            {% if administrador.active %}<span class="cen-tag green">● Ativo</span>{% else %}<span class="cen-tag red">● Inativo</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if administrador.id == 1 %}
+        <div class="cen-admin-protected">🔒 Conta principal protegida — nenhuma ação de exclusão disponível.</div>
+      {% elif administrador.id == me.id %}
+        <div class="cen-admin-protected">🔒 Esta é sua conta — você não pode arquivá-la nem remover seus próprios privilégios aqui.</div>
+      {% else %}
+        <div class="cen-admin-actions">
+          {% if administrador.is_superadmin %}
+            <details class="cen-action gold">
+              <summary>👤 Remover privilégios</summary>
+              <form method="POST" action="{{ url_for('rebaixar_administrador', uid=administrador.id) }}" onsubmit="return confirm('Remover os privilégios de SUPER ADMINISTRADOR desta conta?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label for="senha-rebaixar-{{ administrador.id }}">Sua senha de SUPER ADMINISTRADOR</label>
+                <input type="password" id="senha-rebaixar-{{ administrador.id }}" name="senha_atual" autocomplete="current-password" required>
+                <button class="btn" type="submit" style="background:#b45309;color:white;">Confirmar rebaixamento</button>
+              </form>
+            </details>
+          {% else %}
+            <details class="cen-action">
+              <summary>{% if administrador.active %}🔴 Desativar conta{% else %}🟢 Ativar conta{% endif %}</summary>
+              <form method="POST" action="{{ url_for('alterar_situacao_administrador', uid=administrador.id) }}" onsubmit="return confirm('Confirma a alteração da situação deste administrador?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn" type="submit" style="background:{% if administrador.active %}#b42318{% else %}#16803c{% endif %};color:white;">{% if administrador.active %}Confirmar desativação{% else %}Confirmar ativação{% endif %}</button>
+              </form>
+            </details>
+            {% if administrador.active %}
+              <details class="cen-action gold">
+                <summary>👑 Tornar SUPER ADMINISTRADOR</summary>
+                <form method="POST" action="{{ url_for('promover_administrador', uid=administrador.id) }}" onsubmit="return confirm('ATENÇÃO: esta conta terá acesso completo, inclusive para cadastrar outros SUPER ADMINISTRADORES. Confirma?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <label for="senha-promocao-{{ administrador.id }}">Sua senha de SUPER ADMINISTRADOR</label>
+                  <input type="password" id="senha-promocao-{{ administrador.id }}" name="senha_atual" autocomplete="current-password" required>
+                  <button class="btn" type="submit" style="background:#9a6700;color:white;">Confirmar promoção</button>
+                </form>
+              </details>
+            {% endif %}
+          {% endif %}
+          <details class="cen-action danger">
+            <summary>🗑️ Excluir administrador</summary>
+            <form method="POST" action="{{ url_for('arquivar_administrador', uid=administrador.id) }}" onsubmit="return confirm('ATENÇÃO: arquivar este administrador e bloquear seu acesso? O histórico será preservado.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <p class="muted" style="font-size:.85rem;">A conta será arquivada, não apagada definitivamente.</p>
+              <label for="senha-arquivar-{{ administrador.id }}">Sua senha de SUPER ADMINISTRADOR</label>
+              <input type="password" id="senha-arquivar-{{ administrador.id }}" name="senha_atual" autocomplete="current-password" required>
+              <button class="btn" type="submit" style="background:#b42318;color:white;">🗑️ Confirmar arquivamento</button>
+            </form>
+          </details>
+        </div>
+      {% endif %}
+    </section>
+  {% else %}
+    <div class="cen-admin-card">Nenhum administrador cadastrado.</div>
+  {% endfor %}
+</div>
+{% endblock %}
