@@ -1455,10 +1455,18 @@ def alterar_senha_admin(uid):
         flash('Senha do SUPER ADMINISTRADOR incorreta.', 'error')
         return redirect(url_for('minha_conta_admin'))
 
+    
     administrador = db().execute(
-        "SELECT id, password_hash FROM users WHERE id=? AND role='admin'",
+        """
+        SELECT id, password_hash
+        FROM users
+        WHERE id=?
+          AND role='admin'
+          AND deleted_at IS NULL
+        """,
         (uid,)
     ).fetchone()
+
 
     if not administrador:
         abort(404)
@@ -1480,10 +1488,18 @@ def alterar_senha_admin(uid):
 
     novo_hash = generate_password_hash(nova_senha)
 
+    
     db().execute(
-        'UPDATE users SET password_hash=? WHERE id=?',
+        """
+        UPDATE users
+        SET password_hash=?
+        WHERE id=?
+          AND role='admin'
+          AND deleted_at IS NULL
+        """,
         (novo_hash, uid)
     )
+
 
     audit('alterar_senha', 'administrador', uid)
     db().commit()
