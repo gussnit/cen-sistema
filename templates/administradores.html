@@ -85,24 +85,23 @@
             <tbody>
                 {% for administrador in administradores %}
                 <tr>
-                   
-<td>
-    {{ administrador.name }}
+                    <td>
+                        {{ administrador.name }}
 
-    {% if administrador.is_superadmin %}
-        <div style="margin-top:6px; color:#9a6700; font-weight:bold;">
-            👑 SUPER ADMINISTRADOR
-        </div>
-    {% else %}
-        <div style="margin-top:6px; color:#64748b;">
-            👤 ADMINISTRADOR AUXILIAR
-        </div>
-    {% endif %}
+                        {% if administrador.is_superadmin %}
+                            <div style="margin-top:6px; color:#9a6700; font-weight:bold;">
+                                👑 SUPER ADMINISTRADOR
+                            </div>
+                        {% else %}
+                            <div style="margin-top:6px; color:#64748b;">
+                                👤 ADMINISTRADOR AUXILIAR
+                            </div>
+                        {% endif %}
 
-    {% if administrador.id == me.id %}
-        <strong>(Você)</strong>
-    {% endif %}
-</td>
+                        {% if administrador.id == me.id %}
+                            <strong>(Você)</strong>
+                        {% endif %}
+                    </td>
 
                     <td>{{ administrador.email }}</td>
 
@@ -113,100 +112,132 @@
                             🔴 Inativo
                         {% endif %}
                     </td>
-                  
-<td>
-    
-{% if administrador.is_superadmin %}
 
-    {% if administrador.id == 1 %}
-        <strong>👑 Principal protegido</strong>
+                    <td>
 
-    {% elif administrador.id == me.id %}
-        <strong>👑 Sua conta</strong>
+                        {% if administrador.is_superadmin %}
 
-    {% else %}
-        <form method="POST"
-              action="{{ url_for('rebaixar_administrador', uid=administrador.id) }}"
-              onsubmit="return confirm('Confirma a remoção dos privilégios de SUPER ADMINISTRADOR? A conta continuará ativa como Administrador Auxiliar.');">
+                            {% if administrador.id == 1 %}
+                                <strong>👑 Principal protegido</strong>
 
-            <input type="hidden"
-                   name="csrf_token"
-                   value="{{ csrf_token() }}">
+                            {% elif administrador.id == me.id %}
+                                <strong>👑 Sua conta</strong>
 
-            <label for="senha-rebaixar-{{ administrador.id }}">
-                Senha do SUPER ADMINISTRADOR
-            </label>
+                            {% else %}
+                                <form method="POST"
+                                      action="{{ url_for('rebaixar_administrador', uid=administrador.id) }}"
+                                      onsubmit="return confirm('Confirma a remoção dos privilégios de SUPER ADMINISTRADOR? A conta continuará ativa como Administrador Auxiliar.');">
 
-            <input type="password"
-                   id="senha-rebaixar-{{ administrador.id }}"
-                   name="senha_atual"
-                   autocomplete="current-password"
-                   required>
+                                    <input type="hidden"
+                                           name="csrf_token"
+                                           value="{{ csrf_token() }}">
 
-            <button type="submit"
-                    class="btn"
-                    style="margin-top:8px; background:#b45309;">
-                👤 Remover privilégios
-            </button>
-        </form>
-    {% endif %}
+                                    <label for="senha-rebaixar-{{ administrador.id }}">
+                                        Senha do SUPER ADMINISTRADOR
+                                    </label>
 
-{% else %}
+                                    <input type="password"
+                                           id="senha-rebaixar-{{ administrador.id }}"
+                                           name="senha_atual"
+                                           autocomplete="current-password"
+                                           required>
 
+                                    <button type="submit"
+                                            class="btn"
+                                            style="margin-top:8px; background:#b45309;">
+                                        👤 Remover privilégios
+                                    </button>
+                                </form>
+                            {% endif %}
 
-        <form method="POST"
-              action="{{ url_for('alterar_situacao_administrador', uid=administrador.id) }}"
-              onsubmit="return confirm('Confirma a alteração da situação deste administrador?');">
+                        {% else %}
 
-            <input type="hidden"
-                   name="csrf_token"
-                   value="{{ csrf_token() }}">
+                            <form method="POST"
+                                  action="{{ url_for('alterar_situacao_administrador', uid=administrador.id) }}"
+                                  onsubmit="return confirm('Confirma a alteração da situação deste administrador?');">
 
-            {% if administrador.active %}
-                <button type="submit" class="btn"
-                        style="background:#b42318;">
-                    🔴 Desativar
-                </button>
-            {% else %}
-                <button type="submit" class="btn"
-                        style="background:#16803c;">
-                    🟢 Ativar
-                </button>
-            {% endif %}
-        </form>
+                                <input type="hidden"
+                                       name="csrf_token"
+                                       value="{{ csrf_token() }}">
 
-        {% if administrador.active %}
-            <form method="POST"
-                  action="{{ url_for('promover_administrador', uid=administrador.id) }}"
-                  style="margin-top:12px;"
-                  onsubmit="return confirm('ATENÇÃO: este administrador terá acesso completo ao CEN, inclusive para cadastrar outros SUPER ADMINISTRADORES. Confirma a promoção?');">
+                                {% if administrador.active %}
+                                    <button type="submit"
+                                            class="btn"
+                                            style="background:#b42318;">
+                                        🔴 Desativar
+                                    </button>
+                                {% else %}
+                                    <button type="submit"
+                                            class="btn"
+                                            style="background:#16803c;">
+                                        🟢 Ativar
+                                    </button>
+                                {% endif %}
+                            </form>
 
-                <input type="hidden"
-                       name="csrf_token"
-                       value="{{ csrf_token() }}">
+                            {% if administrador.active %}
+                                <form method="POST"
+                                      action="{{ url_for('promover_administrador', uid=administrador.id) }}"
+                                      style="margin-top:12px;"
+                                      onsubmit="return confirm('ATENÇÃO: este administrador terá acesso completo ao CEN, inclusive para cadastrar outros SUPER ADMINISTRADORES. Confirma a promoção?');">
 
-                <label for="senha-promocao-{{ administrador.id }}">
-                    Senha do SUPER ADMINISTRADOR
-                </label>
+                                    <input type="hidden"
+                                           name="csrf_token"
+                                           value="{{ csrf_token() }}">
 
-                <input type="password"
-                       id="senha-promocao-{{ administrador.id }}"
-                       name="senha_atual"
-                       autocomplete="current-password"
-                       required>
+                                    <label for="senha-promocao-{{ administrador.id }}">
+                                        Senha do SUPER ADMINISTRADOR
+                                    </label>
 
-                <button type="submit"
-                        class="btn"
-                        style="margin-top:8px; background:#9a6700;">
-                    👑 Tornar SUPER ADMINISTRADOR
-                </button>
-            </form>
-        {% endif %}
+                                    <input type="password"
+                                           id="senha-promocao-{{ administrador.id }}"
+                                           name="senha_atual"
+                                           autocomplete="current-password"
+                                           required>
 
-    {% endif %}
-</td>
+                                    <button type="submit"
+                                            class="btn"
+                                            style="margin-top:8px; background:#9a6700;">
+                                        👑 Tornar SUPER ADMINISTRADOR
+                                    </button>
+                                </form>
+                            {% endif %}
 
+                        {% endif %}
+
+                        {% if administrador.id != 1 and administrador.id != me.id %}
+
+                            <form method="POST"
+                                  action="{{ url_for('arquivar_administrador', uid=administrador.id) }}"
+                                  style="margin-top:15px; padding-top:12px; border-top:1px solid #ddd;"
+                                  onsubmit="return confirm('ATENÇÃO! Deseja realmente excluir este administrador? Ele perderá o acesso ao sistema, mas seus dados e histórico serão preservados.');">
+
+                                <input type="hidden"
+                                       name="csrf_token"
+                                       value="{{ csrf_token() }}">
+
+                                <label for="senha-arquivar-{{ administrador.id }}">
+                                    Senha do SUPER ADMINISTRADOR
+                                </label>
+
+                                <input type="password"
+                                       id="senha-arquivar-{{ administrador.id }}"
+                                       name="senha_atual"
+                                       autocomplete="current-password"
+                                       required>
+
+                                <button type="submit"
+                                        class="btn"
+                                        style="margin-top:8px; background:#b42318; color:white;">
+                                    🗑️ Excluir administrador
+                                </button>
+                            </form>
+
+                        {% endif %}
+
+                    </td>
                 </tr>
+
                 {% else %}
                 <tr>
                     <td colspan="4">
