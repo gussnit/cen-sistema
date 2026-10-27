@@ -11,7 +11,7 @@
   {% set nav_alunos = nav_students %}
   {% set nav_aluno = s if s is defined else ((nav_alunos|selectattr('id','equalto',selected_student_id)|first|default(none)) or (nav_alunos[0] if nav_alunos else none)) %}
   <nav class="nav nav-aluno" aria-label="Navegação do portal do aluno">
-    <a href="{{ url_for('home') }}" aria-label="Início"><span aria-hidden="true">⌂</span><small>Início</small></a>
+    <a href="{{ url_for('admin') if me and me.role == 'admin' else url_for('home') }}" aria-label="Início"><span aria-hidden="true">⌂</span><small>Início</small></a>
     {% if nav_aluno %}
     <a href="{{ url_for('boletim', sid=nav_aluno.id) }}" aria-label="Boletim"><span aria-hidden="true">📊</span><small>Boletim</small></a>
     <a href="{{ url_for('financeiro', sid=nav_aluno.id) }}" aria-label="Financeiro"><span aria-hidden="true">💳</span><small>Financeiro</small></a>
