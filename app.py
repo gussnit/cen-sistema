@@ -1677,15 +1677,19 @@ def rebaixar_administrador(uid):
         'SELECT pg_advisory_xact_lock(74621001)'
     )
 
+    
     administrador = db().execute(
         """
         SELECT id, is_superadmin
         FROM users
-        WHERE id=? AND role='admin'
+        WHERE id=?
+          AND role='admin'
+          AND deleted_at IS NULL
         FOR UPDATE
         """,
         (uid,)
     ).fetchone()
+
 
     if not administrador:
         abort(404)
@@ -1711,15 +1715,20 @@ def rebaixar_administrador(uid):
         )
         return redirect(url_for('listar_administradores'))
 
+    
     db().execute(
         """
         UPDATE users
         SET is_superadmin=FALSE
-        WHERE id=? AND role='admin'
+        WHERE id=?
+          AND role='admin'
           AND is_superadmin=TRUE
+          AND deleted_at IS NULL
+          AND id<>1
         """,
         (uid,)
     )
+
 
     audit('remover_superadmin', 'administrador', uid)
     db().commit()
