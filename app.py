@@ -1725,7 +1725,8 @@ def rebaixar_administrador(uid):
 
 
     try:
-        db().execute(
+        
+        resultado = db().execute(
             """
             UPDATE users
             SET is_superadmin=FALSE
@@ -1734,11 +1735,21 @@ def rebaixar_administrador(uid):
               AND is_superadmin=TRUE
               AND deleted_at IS NULL
               AND id<>1
+            RETURNING id
             """,
             (uid,)
-        )
+        ).fetchone()
+
+        if not resultado:
+            db().rollback()
+            flash(
+                'Não foi possível remover os privilégios deste administrador.',
+                'error'
+            )
+            return redirect(url_for('listar_administradores'))
 
         audit('remover_superadmin', 'administrador', uid)
+
         db().commit()
 
     except Exception:
