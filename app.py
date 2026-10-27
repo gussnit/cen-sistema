@@ -1617,17 +1617,30 @@ def arquivar_administrador(uid):
 
     
     try:
-        db().execute(
+       
+        resultado = db().execute(
             """
             UPDATE users
             SET deleted_at=CURRENT_TIMESTAMP,
                 active=0,
                 is_superadmin=FALSE
-            WHERE id=? AND role='admin'
+            WHERE id=?
+              AND role='admin'
               AND deleted_at IS NULL
+              AND id<>1
+            RETURNING id
             """,
             (uid,)
-        )
+        ).fetchone()
+
+        if not resultado:
+            db().rollback()
+            flash(
+                'Não foi possível arquivar este administrador.',
+                'error'
+            )
+            return redirect(url_for('listar_administradores'))
+
 
         audit('arquivar', 'administrador', uid)
 
