@@ -1607,14 +1607,14 @@ def arquivar_administrador(uid):
             """
         ).fetchone()['total']
 
+       
         if quantidade <= 1:
-        db().rollback()
+            db().rollback()
             flash(
                 'Não é possível arquivar o último SUPER ADMINISTRADOR ativo.',
                 'error'
             )
             return redirect(url_for('listar_administradores'))
-
     
     try:
        
