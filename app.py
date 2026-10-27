@@ -1312,10 +1312,13 @@ def criar_administrador():
 
 @app.post('/admin/administradores/<int:uid>/situacao')
 @superadmin_required
+
+@app.post('/admin/administradores/<int:uid>/situacao')
+@superadmin_required
 def alterar_situacao_administrador(uid):
     administrador = db().execute(
         """
-        SELECT id, active, is_superadmin
+        SELECT id, active, is_superadmin, deleted_at
         FROM users
         WHERE id=? AND role='admin'
         """,
@@ -1325,6 +1328,14 @@ def alterar_situacao_administrador(uid):
     if not administrador:
         abort(404)
 
+    # Contas arquivadas não podem ser reativadas.
+    if administrador['deleted_at'] is not None:
+        abort(
+            403,
+            'Administradores arquivados não podem ser ativados ou desativados.'
+        )
+
+    # Super administradores não podem ser desativados.
     if administrador['is_superadmin']:
         abort(
             403,
@@ -1337,7 +1348,10 @@ def alterar_situacao_administrador(uid):
         """
         UPDATE users
         SET active=?
-        WHERE id=? AND role='admin' AND is_superadmin=FALSE
+        WHERE id=?
+          AND role='admin'
+          AND is_superadmin=FALSE
+          AND deleted_at IS NULL
         """,
         (nova_situacao, uid)
     )
