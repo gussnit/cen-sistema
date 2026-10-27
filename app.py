@@ -1,119 +1,95 @@
-@app.get('/comunicado/<int:nid>/anexo')
-@login_required
-def notice_attachment(nid):
-    n=db().execute('SELECT attachment_file,published,archived FROM notices WHERE id=?',(nid,)).fetchone()
-    if not n or (current_user()['role']!='admin' and (not n['published'] or n['archived'])):abort(404)
-    response=private_file('pdf',n['attachment_file'])
-    response.headers['Cache-Control']='private, no-store'
-    response.headers['Content-Disposition']=(('attachment' if request.args.get('baixar')=='1' else 'inline')+'; filename="comunicado.pdf"')
-    return response
 
-@app.post('/admin/aviso')
-@admin_required
-def add_notice():
-    title=value('title',200);body=value('body',10000)
-    if not title or not body:abort(400)
-    cid=number('notice_category_id') if value('notice_category_id') else None
-    if cid and not db().execute('SELECT 1 FROM notice_categories WHERE id=? AND active=1',(cid,)).fetchone():abort(400)
-    image=request.files.get('image');attachment=request.files.get('attachment')
-    image_file=store_upload(image,'image') if image and image.filename else None
-    attachment_file=store_upload(attachment,'pdf') if attachment and attachment.filename else None
-    cur=db().execute('INSERT INTO notices(title,body,kind,notice_category_id,image_file,attachment_file,pinned,published,archived) VALUES(?,?,?,?,?,?,?,?,0)',(title,body,value('kind',100) or 'Comunicado',cid,image_file,attachment_file,1 if value('pinned')=='1' else 0,1 if value('published')=='1' else 0))
-    audit('criar','aviso',cur.lastrowid);db().commit();return redirect(url_for('admin')+'#comunicados')
+from io import BytesIO
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle
+)
+import os, secrets, click, uuid, io
+import urllib.request, urllib.error, urllib.parse
+from werkzeug.utils import secure_filename
+from flask import send_file
+from datetime import date, datetime
+from functools import wraps
+from pathlib import Path
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, g
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
-@app.post('/admin/aviso/<int:nid>')
-@admin_required
-def edit_notice(nid):
-    old=db().execute('SELECT * FROM notices WHERE id=?',(nid,)).fetchone()
-    if not old:abort(404)
-    title=value('title',200);body=value('body',10000)
-    if not title or not body:abort(400)
-    cid=number('notice_category_id') if value('notice_category_id') else None
-    if cid and not db().execute('SELECT 1 FROM notice_categories WHERE id=?',(cid,)).fetchone():abort(400)
-    image=request.files.get('image');attachment=request.files.get('attachment')
-    image_file=store_upload(image,'image') if image and image.filename else old['image_file']
-    attachment_file=store_upload(attachment,'pdf') if attachment and attachment.filename else old['attachment_file']
-    db().execute('UPDATE notices SET title=?,body=?,notice_category_id=?,image_file=?,attachment_file=?,pinned=?,published=?,archived=? WHERE id=?',(title,body,cid,image_file,attachment_file,1 if value('pinned')=='1' else 0,1 if value('published')=='1' else 0,1 if value('archived')=='1' else 0,nid))
-    audit('editar','aviso',nid);db().commit();return redirect(url_for('admin')+'#comunicados')
+ROOT=Path(__file__).resolve().parent
+app=Flask(__name__)
+app.config.update(SECRET_KEY=os.environ.get('SECRET_KEY') or secrets.token_hex(32),SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SESSION_COOKIE_SECURE=os.getenv('COOKIE_SECURE','0')=='1',MAX_CONTENT_LENGTH=12*1024*1024)
+csrf=CSRFProtect(app)
+limiter=Limiter(get_remote_address,app=app,default_limits=[])
+# DATABASE_URL é usada pela conexão PostgreSQL; DATABASE_PATH não é utilizada.
+UPLOAD_ROOT=Path(os.getenv('UPLOAD_ROOT',str(ROOT/'private_uploads'))).resolve()
 
-@app.post('/admin/categoria-comunicado')
-@admin_required
-def add_notice_category():
-    name=value('name',80)
-    if not name:abort(400)
-    cur=db().execute('INSERT INTO notice_categories(name) VALUES(?)',(name,));audit('criar','categoria_comunicado',cur.lastrowid);db().commit()
-    return redirect(url_for('admin')+'#comunicados')
+# PostgreSQL via Supabase. Nunca imprime DATABASE_URL nos logs.
+import psycopg
+from psycopg.rows import dict_row
+from psycopg import IntegrityError as PGIntegrityError
 
-@app.post('/admin/categoria-comunicado/<int:cid>')
-@admin_required
-def edit_notice_category(cid):
-    name=value('name',80)
-    if not name:abort(400)
-    db().execute('UPDATE notice_categories SET name=?,active=? WHERE id=?',(name,1 if value('active')=='1' else 0,cid));audit('editar','categoria_comunicado',cid);db().commit()
-    return redirect(url_for('admin')+'#comunicados')
+class RowCompat(dict):
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
 
-@app.post('/admin/evento')
-@admin_required
-def add_event():
-    start=value('event_date');end=value('end_date') or start
-    try:
-        if date.fromisoformat(end)<date.fromisoformat(start):abort(400)
-    except ValueError:abort(400)
-    cur=db().execute('INSERT INTO events(event_date,end_date,title,details,category_id) VALUES(?,?,?,?,?)',(start,end,value('title'),value('details',1000),number('category_id') if value('category_id') else None));audit('criar','evento',cur.lastrowid);db().commit();return redirect(url_for('calendario'))
-@app.post('/admin/evento/<int:eid>')
-@admin_required
-def edit_event(eid):
-    if not db().execute('SELECT 1 FROM events WHERE id=?',(eid,)).fetchone():abort(404)
-    start=value('event_date');end=value('end_date') or start
-    try:
-        if date.fromisoformat(end)<date.fromisoformat(start):abort(400)
-    except ValueError:abort(400)
-    cid=number('category_id') if value('category_id') else None
-    db().execute('UPDATE events SET event_date=?,end_date=?,title=?,details=?,category_id=? WHERE id=?',(start,end,value('title'),value('details',1000),cid,eid))
-    audit('editar','evento',eid);db().commit();return redirect(url_for('admin')+'#eventos')
+class PortalCursor:
+    def __init__(self, cursor):
+        self._cursor = cursor
+        self.lastrowid = None
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        return RowCompat(row) if row is not None else None
+    def fetchall(self):
+        return [RowCompat(row) for row in self._cursor.fetchall()]
+    def __iter__(self):
+        return (RowCompat(row) for row in self._cursor)
 
-@app.post('/admin/evento/<int:eid>/excluir')
-@admin_required
-def delete_event(eid):
-    db().execute('DELETE FROM events WHERE id=?',(eid,));audit('excluir','evento',eid);db().commit()
-    return redirect(url_for('admin')+'#eventos')
+class PortalDB:
+    def __init__(self, conn):
+        self.conn = conn
+    def execute(self, query, params=()):
+        # Consultas existentes usam placeholders SQLite e INSERT OR IGNORE.
+        query = query.replace('?', '%s')
+        ignore = 'INSERT OR IGNORE INTO ' in query
+        query = query.replace('INSERT OR IGNORE INTO ', 'INSERT INTO ')
+        if ignore and 'ON CONFLICT' not in query.upper():
+            query += ' ON CONFLICT DO NOTHING'
+        # Compatibilidade com literais de string SQLite usados em CASE.
+        query = query.replace('="Pago"', "='Pago'")
+        # SELECT COUNT(*) etc. usam dict_row; acesso [0] resolvido abaixo.
+        insert = query.lstrip().upper().startswith('INSERT INTO ')
+        returns_id = insert and 'RETURNING ' not in query.upper() and 'ON CONFLICT' not in query.upper()
+        if returns_id:
+            query += ' RETURNING id'
+        cur = self.conn.execute(query, params)
+        out = PortalCursor(cur)
+        if returns_id:
+            record = cur.fetchone()
+            out.lastrowid = record['id'] if record else None
+        return out
+    def commit(self):
+        self.conn.commit()
+    def rollback(self):
+        self.conn.rollback()
+    def close(self):
+        self.conn.close()
 
-@app.post('/admin/mensagens/enviar')
-@admin_required
-def send_admin_message():
-    subject=value('subject',200);body=value('body',2000);scope=value('scope')
-    if not subject or not body or scope not in ('student','class','all'):abort(400)
-    if scope=='student':
-        sid=number('student_id');check_student(sid);student_ids=[sid]
-    elif scope=='class':
-        class_name=value('class_name',100)
-        if not class_name:abort(400)
-        student_ids=[r['id'] for r in db().execute('SELECT id FROM students WHERE class_name=? AND active=1',(class_name,))]
-    else:
-        student_ids=[r['id'] for r in db().execute('SELECT id FROM students WHERE active=1')]
-    for sid in student_ids:
-        cur=db().execute('INSERT INTO messages(student_id,sender_id,subject,body) VALUES(?,?,?,?)',(sid,session['uid'],subject,body))
-        audit('enviar','mensagem',cur.lastrowid)
-    db().commit();flash(f'Mensagem enviada para {len(student_ids)} aluno(s).','success')
-    return redirect(url_for('admin')+'#mensagens')
-
-@app.post('/admin/legenda')
-@admin_required
-def add_category():
-    name=value('name',80);color=value('color',7)
-    import re
-    if not name or not re.fullmatch(r'#[0-9a-fA-F]{6}',color):abort(400)
-    cur=db().execute('INSERT INTO event_categories(name,color) VALUES(?,?)',(name,color));audit('criar','legenda',cur.lastrowid);db().commit()
-    return redirect(url_for('admin')+'#legendas')
-@app.post('/admin/legenda/<int:cid>')
-@admin_required
-def update_category(cid):
-    name=value('name',80);color=value('color',7)
-    import re
-    if not name or not re.fullmatch(r'#[0-9a-fA-F]{6}',color):abort(400)
-    db().execute('UPDATE event_categories SET name=?,color=?,active=? WHERE id=?',(name,color,1 if value('active')=='1' else 0,cid));audit('editar','legenda',cid);db().commit()
-    return redirect(url_for('admin')+'#legendas')
-@app.errorhandler(PGIntegrityError)
-def integrity(_):db().rollback();flash('Registro duplicado ou dados inválidos.','error');return redirect(url_for('admin'))
-if __name__=='__main__':
-    init_db();app.run(debug=os.getenv('FLASK_DEBUG')=='1')
+def db():
+    if 'db' not in g:
+        url = os.getenv('DATABASE_URL', '').strip()
+        if not url:
+            raise RuntimeError('DATABASE_URL não configurada no Render (ambiente de teste).')
+        if not url.startswith(('postgresql://', 'postgres://')):
+            raise RuntimeError('DATABASE_URL deve ser uma URL PostgreSQL.')
+        g.db = PortalDB(psycopg.connect(url, row_factory=dict_row, connect_timeout=10, sslmode='require'))
+    return g.db
