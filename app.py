@@ -1497,6 +1497,15 @@ def minha_conta_admin():
 @app.post('/admin/administradores/<int:uid>/arquivar')
 @superadmin_required
 def arquivar_administrador(uid):
+
+    # Proteção permanente do SUPER ADMINISTRADOR CEN.
+    # A conta principal possui o ID 1.
+    if uid == 1:
+        abort(
+            403,
+            'O SUPER ADMINISTRADOR CEN não pode ser arquivado.'
+        )
+
     usuario = current_user()
 
     principal_id = os.environ.get(
