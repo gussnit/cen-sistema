@@ -1668,9 +1668,11 @@ def rebaixar_administrador(uid):
     if not principal_id.isdigit():
         abort(403)
 
-    # O SUPER ADMINISTRADOR CEN é permanente.
-    if uid == int(principal_id):
+    
+    # O SUPER ADMINISTRADOR CEN (ID 1) é permanente.
+    if uid == 1 or uid == int(principal_id):
         abort(403)
+
 
     usuario = current_user()
     if uid == usuario['id']:
