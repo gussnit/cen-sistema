@@ -1712,9 +1712,12 @@ def promover_administrador(uid):
 
     administrador = db().execute(
         """
-        SELECT id, name, active, is_superadmin
-        FROM users
-        WHERE id=? AND role='admin'
+       
+SELECT id, name, active, is_superadmin, deleted_at
+FROM users
+WHERE id=? AND role='admin'
+  AND deleted_at IS NULL
+
         """,
         (uid,)
     ).fetchone()
@@ -1732,10 +1735,14 @@ def promover_administrador(uid):
 
     db().execute(
         """
-        UPDATE users
-        SET is_superadmin=TRUE
-        WHERE id=? AND role='admin'
-          AND active=1 AND is_superadmin=FALSE
+       
+UPDATE users
+SET is_superadmin=TRUE
+WHERE id=? AND role='admin'
+  AND active=1
+  AND is_superadmin=FALSE
+  AND deleted_at IS NULL
+
         """,
         (uid,)
     )
