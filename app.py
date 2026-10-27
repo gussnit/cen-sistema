@@ -1703,8 +1703,7 @@ def rebaixar_administrador(uid):
         )
         return redirect(url_for('listar_administradores'))
 
-    
-
+   
     quantidade = db().execute(
         """
         SELECT COUNT(*) AS total
@@ -1712,9 +1711,9 @@ def rebaixar_administrador(uid):
         WHERE role='admin'
           AND active=1
           AND is_superadmin=TRUE
+          AND deleted_at IS NULL
         """
     ).fetchone()['total']
-
    
     if quantidade <= 1:
         db().rollback()
