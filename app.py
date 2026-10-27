@@ -1507,6 +1507,7 @@ def alterar_senha_admin(uid):
     flash('Senha do administrador atualizada com sucesso!', 'success')
     return redirect(url_for('minha_conta_admin'))
 
+
 @app.get('/admin/minha-conta')
 @superadmin_required
 def minha_conta_admin():
@@ -1515,6 +1516,7 @@ def minha_conta_admin():
         SELECT id, name, email, active
         FROM users
         WHERE role = 'admin'
+          AND deleted_at IS NULL
         ORDER BY name
         """
     ).fetchall()
@@ -1524,6 +1526,7 @@ def minha_conta_admin():
         administradores=administradores,
         me=current_user()
     )
+
 
 
 @app.post('/admin/administradores/<int:uid>/arquivar')
