@@ -1718,10 +1718,13 @@ def promover_administrador(uid):
 def listar_administradores():
     administradores = db().execute(
         """
-        SELECT id, name, email, active, is_superadmin
-        FROM users
-        WHERE role = 'admin'
-        ORDER BY name
+       
+SELECT id, name, email, active, is_superadmin
+FROM users
+WHERE role = 'admin'
+  AND deleted_at IS NULL
+ORDER BY name
+
         """
     ).fetchall()
 
