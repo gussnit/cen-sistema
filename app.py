@@ -1548,10 +1548,15 @@ def arquivar_administrador(uid):
     ).fetchone()
 
     if not administrador:
+        db().rollback()
         abort(404)
 
     if administrador['deleted_at'] is not None:
-        flash('Este administrador já está arquivado.', 'error')
+        db().rollback()
+        flash(
+            'Este administrador já está arquivado.',
+            'error'
+        )
         return redirect(url_for('listar_administradores'))
 
     # Preservar ao menos um SUPER ADMINISTRADOR ativo.
@@ -1568,6 +1573,7 @@ def arquivar_administrador(uid):
         ).fetchone()['total']
 
         if quantidade <= 1:
+        db().rollback()
             flash(
                 'Não é possível arquivar o último SUPER ADMINISTRADOR ativo.',
                 'error'
