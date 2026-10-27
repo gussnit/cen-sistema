@@ -1692,11 +1692,18 @@ def rebaixar_administrador(uid):
 
 
     if not administrador:
+        db().rollback()
         abort(404)
 
     if not administrador['is_superadmin']:
-        flash('Este usuário não é SUPER ADMINISTRADOR.', 'error')
+        db().rollback()
+        flash(
+            'Este usuário não é SUPER ADMINISTRADOR.',
+            'error'
+        )
         return redirect(url_for('listar_administradores'))
+
+    
 
     quantidade = db().execute(
         """
@@ -1708,7 +1715,9 @@ def rebaixar_administrador(uid):
         """
     ).fetchone()['total']
 
+   
     if quantidade <= 1:
+        db().rollback()
         flash(
             'Não é possível remover o último SUPER ADMINISTRADOR ativo.',
             'error'
