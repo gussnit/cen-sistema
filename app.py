@@ -350,6 +350,8 @@ def number(key):
 @app.get('/')
 def home():
     if not current_user():return redirect(url_for('login'))
+    if current_user()['role'] == 'admin':
+        return redirect(url_for('admin'))
     students=allowed_students()
     requested=request.args.get('aluno',type=int)
     if requested is not None:
@@ -422,7 +424,7 @@ def upload_home_banner():
     name=store_upload(request.files.get('file'),'image')
     db().execute("INSERT INTO portal_settings(key,filename) VALUES('home_banner',?) ON CONFLICT(key) DO UPDATE SET filename=excluded.filename,updated_at=CURRENT_TIMESTAMP",(name,))
     audit('banner','portal',None);db().commit()
-    flash('Banner atualizado.','success');return redirect(url_for('admin')+'#banner')
+    flash('Banner atualizado.','success');return redirect(url_for('admin_modulos')+'#banner')
 
 @app.route('/login',methods=['GET','POST'])
 @limiter.limit('8 per minute',methods=['POST'])
@@ -552,7 +554,7 @@ def add_report_subject():
     if not 2000<=year<=2100 or segment not in ('F2','EM') or not name or position<0:abort(400)
     ensure_subjects(year,segment)
     db().execute('INSERT INTO report_subjects(school_year,segment,class_name,name,position) VALUES(?,?,?,?,?)',(year,segment,class_name,name,position))
-    audit('criar','disciplina',None);db().commit();return redirect(url_for('admin')+'#disciplinas')
+    audit('criar','disciplina',None);db().commit();return redirect(url_for('admin_modulos')+'#disciplinas')
 
 @app.post('/admin/disciplinas/<int:subject_id>')
 @admin_required
@@ -562,7 +564,7 @@ def edit_report_subject(subject_id):
     row=db().execute('SELECT id FROM report_subjects WHERE id=?',(subject_id,)).fetchone()
     if not row:abort(404)
     db().execute('UPDATE report_subjects SET name=?,position=?,active=? WHERE id=?',(name,position,active,subject_id))
-    audit('editar','disciplina',subject_id);db().commit();return redirect(url_for('admin')+'#disciplinas')
+    audit('editar','disciplina',subject_id);db().commit();return redirect(url_for('admin_modulos')+'#disciplinas')
 
 @app.get('/aluno/<int:sid>/historico-financeiro/pdf')
 @login_required
@@ -1901,6 +1903,7 @@ def ensure_message_batch_schema():
 
 
 @app.get('/admin')
+@app.get('/admin/modulos', endpoint='admin_modulos')
 @admin_required
 def admin():
     ensure_message_batch_schema()
@@ -2072,7 +2075,7 @@ def admin():
     message_classes = sorted({s['class_name'] for s in students if s['class_name']})
 
     return render_template(
-        'admin.html',
+        'admin_modulos.html' if request.endpoint == 'admin_modulos' else 'admin.html',
         total_alunos=total_alunos,
         total_responsaveis=total_responsaveis,
         alunos_ativos=alunos_ativos,
@@ -2112,7 +2115,7 @@ def admin():
 @app.post('/admin/aluno')
 @admin_required
 def add_student():
-    cur=db().execute('INSERT INTO students(name,registration,grade_level,class_name) VALUES(?,?,?,?)',(value('name'),value('registration'),value('grade_level'),value('class_name')));audit('criar','aluno',cur.lastrowid);db().commit();return redirect(url_for('admin'))
+    cur=db().execute('INSERT INTO students(name,registration,grade_level,class_name) VALUES(?,?,?,?)',(value('name'),value('registration'),value('grade_level'),value('class_name')));audit('criar','aluno',cur.lastrowid);db().commit();return redirect(url_for('admin_modulos'))
 @app.post('/admin/aluno/<int:sid>')
 @admin_required
 def update_student(sid):
@@ -2121,8 +2124,8 @@ def update_student(sid):
 @admin_required
 def add_guardian():
     password=request.form.get('password','')
-    if len(password)<6:flash('A senha inicial precisa ter pelo menos 6 caracteres.','error');return redirect(url_for('admin'))
-    cur=db().execute('INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,?)',(value('name'),value('email').lower(),generate_password_hash(password),'responsavel'));audit('criar','responsavel',cur.lastrowid);db().commit();return redirect(url_for('admin'))
+    if len(password)<6:flash('A senha inicial precisa ter pelo menos 6 caracteres.','error');return redirect(url_for('admin_modulos'))
+    cur=db().execute('INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,?)',(value('name'),value('email').lower(),generate_password_hash(password),'responsavel'));audit('criar','responsavel',cur.lastrowid);db().commit();return redirect(url_for('admin_modulos'))
 
 
 @app.post('/admin/responsavel/<int:uid>/editar')
@@ -2146,7 +2149,7 @@ def edit_guardian(uid):
 
     if password and len(password) < 6:
         flash('A nova senha precisa ter pelo menos 6 caracteres.', 'error')
-        return redirect(url_for('admin') + '#responsaveis')
+        return redirect(url_for('admin_modulos') + '#responsaveis')
 
     if password:
         db().execute(
@@ -2177,7 +2180,7 @@ def edit_guardian(uid):
     db().commit()
 
     flash('Dados do responsável atualizados com sucesso!', 'success')
-    return redirect(url_for('admin') + '#responsaveis')
+    return redirect(url_for('admin_modulos') + '#responsaveis')
 
 @app.post('/admin/vinculo/<int:uid>/<int:sid>/remover')
 @admin_required
@@ -2208,12 +2211,12 @@ def unlink_guardian(uid, sid):
     db().commit()
 
     flash('Aluno desvinculado com sucesso!', 'success')
-    return redirect(url_for('admin') + '#responsaveis')
+    return redirect(url_for('admin_modulos') + '#responsaveis')
 
 @app.post('/admin/vinculo')
 @admin_required
 def link_guardian():
-    uid=number('user_id');sid=number('student_id');db().execute('INSERT OR IGNORE INTO guardians(user_id,student_id) VALUES(?,?)',(uid,sid));audit('vincular','aluno',sid);db().commit();return redirect(url_for('admin'))
+    uid=number('user_id');sid=number('student_id');db().execute('INSERT OR IGNORE INTO guardians(user_id,student_id) VALUES(?,?)',(uid,sid));audit('vincular','aluno',sid);db().commit();return redirect(url_for('admin_modulos'))
 @app.post('/admin/aluno/<int:sid>/nota')
 @admin_required
 def add_grade(sid):
@@ -2287,7 +2290,7 @@ def payment_status(pid):
     return redirect(
         request.referrer
         if request.referrer and request.referrer.startswith(request.host_url)
-        else url_for('admin')
+        else url_for('admin_modulos')
     )
 
 @app.get('/comunicado/<int:nid>/anexo')
@@ -2311,7 +2314,7 @@ def add_notice():
     image_file=store_upload(image,'image') if image and image.filename else None
     attachment_file=store_upload(attachment,'pdf') if attachment and attachment.filename else None
     cur=db().execute('INSERT INTO notices(title,body,kind,notice_category_id,image_file,attachment_file,pinned,published,archived) VALUES(?,?,?,?,?,?,?,?,0)',(title,body,value('kind',100) or 'Comunicado',cid,image_file,attachment_file,1 if value('pinned')=='1' else 0,1 if value('published')=='1' else 0))
-    audit('criar','aviso',cur.lastrowid);db().commit();return redirect(url_for('admin')+'#comunicados')
+    audit('criar','aviso',cur.lastrowid);db().commit();return redirect(url_for('admin_modulos')+'#comunicados')
 
 @app.post('/admin/aviso/<int:nid>')
 @admin_required
@@ -2326,7 +2329,7 @@ def edit_notice(nid):
     image_file=store_upload(image,'image') if image and image.filename else old['image_file']
     attachment_file=store_upload(attachment,'pdf') if attachment and attachment.filename else old['attachment_file']
     db().execute('UPDATE notices SET title=?,body=?,notice_category_id=?,image_file=?,attachment_file=?,pinned=?,published=?,archived=? WHERE id=?',(title,body,cid,image_file,attachment_file,1 if value('pinned')=='1' else 0,1 if value('published')=='1' else 0,1 if value('archived')=='1' else 0,nid))
-    audit('editar','aviso',nid);db().commit();return redirect(url_for('admin')+'#comunicados')
+    audit('editar','aviso',nid);db().commit();return redirect(url_for('admin_modulos')+'#comunicados')
 
 @app.post('/admin/categoria-comunicado')
 @admin_required
@@ -2334,7 +2337,7 @@ def add_notice_category():
     name=value('name',80)
     if not name:abort(400)
     cur=db().execute('INSERT INTO notice_categories(name) VALUES(?)',(name,));audit('criar','categoria_comunicado',cur.lastrowid);db().commit()
-    return redirect(url_for('admin')+'#comunicados')
+    return redirect(url_for('admin_modulos')+'#comunicados')
 
 @app.post('/admin/categoria-comunicado/<int:cid>')
 @admin_required
@@ -2342,7 +2345,7 @@ def edit_notice_category(cid):
     name=value('name',80)
     if not name:abort(400)
     db().execute('UPDATE notice_categories SET name=?,active=? WHERE id=?',(name,1 if value('active')=='1' else 0,cid));audit('editar','categoria_comunicado',cid);db().commit()
-    return redirect(url_for('admin')+'#comunicados')
+    return redirect(url_for('admin_modulos')+'#comunicados')
 
 @app.post('/admin/evento')
 @admin_required
@@ -2362,13 +2365,13 @@ def edit_event(eid):
     except ValueError:abort(400)
     cid=number('category_id') if value('category_id') else None
     db().execute('UPDATE events SET event_date=?,end_date=?,title=?,details=?,category_id=? WHERE id=?',(start,end,value('title'),value('details',1000),cid,eid))
-    audit('editar','evento',eid);db().commit();return redirect(url_for('admin')+'#eventos')
+    audit('editar','evento',eid);db().commit();return redirect(url_for('admin_modulos')+'#eventos')
 
 @app.post('/admin/evento/<int:eid>/excluir')
 @admin_required
 def delete_event(eid):
     db().execute('DELETE FROM events WHERE id=?',(eid,));audit('excluir','evento',eid);db().commit()
-    return redirect(url_for('admin')+'#eventos')
+    return redirect(url_for('admin_modulos')+'#eventos')
 
 # PASSO 61: exclusão definitiva com auditoria e limpeza de anexos não compartilhados.
 def _remove_unreferenced_storage(candidates):
@@ -2431,7 +2434,7 @@ def delete_admin_notice(nid):
         raise
     _remove_unreferenced_storage([('image', notice['image_file']), ('pdf', notice['attachment_file'])])
     flash('Comunicado excluído definitivamente.', 'success')
-    return redirect(url_for('admin') + '#comunicados')
+    return redirect(url_for('admin_modulos') + '#comunicados')
 
 
 # PASSO 63: edição de mensagem e gerenciamento individual de fotografias.
@@ -2450,7 +2453,7 @@ def edit_admin_message(mid):
     audit('editar', 'mensagem', mid)
     db().commit()
     flash('Mensagem atualizada com sucesso.', 'success')
-    return redirect(url_for('admin') + '#mensagens')
+    return redirect(url_for('admin_modulos') + '#mensagens')
 
 
 @app.post('/admin/mensagens/lote/<int:bid>/editar')
@@ -2470,7 +2473,7 @@ def edit_admin_message_batch(bid):
     audit('editar_envio_coletivo', 'mensagem', ids[0]['id'])
     db().commit()
     flash(f'Mensagem atualizada para {len(ids)} destinatário(s).', 'success')
-    return redirect(url_for('admin') + '#mensagens')
+    return redirect(url_for('admin_modulos') + '#mensagens')
 
 
 @app.post('/admin/mensagens/<int:mid>/fotos/adicionar')
@@ -2520,7 +2523,7 @@ def add_admin_message_photos(mid):
             storage_delete('image', key)
         raise
     flash(f'{len(uploaded)} fotografia(s) adicionada(s) à galeria.', 'success')
-    return redirect(url_for('admin') + '#mensagens')
+    return redirect(url_for('admin_modulos') + '#mensagens')
 
 
 @app.post('/admin/mensagens/<int:mid>/fotos/<int:pid>/excluir')
@@ -2540,7 +2543,7 @@ def delete_admin_message_photo(mid, pid):
     db().commit()
     _remove_unreferenced_storage([('image', photo['storage_key'])])
     flash('Fotografia removida da mensagem.', 'success')
-    return redirect(url_for('admin') + '#mensagens')
+    return redirect(url_for('admin_modulos') + '#mensagens')
 
 
 @app.post('/admin/mensagens/enviar')
@@ -2563,7 +2566,7 @@ def send_admin_message():
         abort(400, 'Selecione no máximo 5 fotografias.')
     if not student_ids:
         flash('Nenhum aluno ativo encontrado para este destinatário.', 'error')
-        return redirect(url_for('admin')+'#mensagens')
+        return redirect(url_for('admin_modulos')+'#mensagens')
 
     # Todas as imagens são convertidas para JPEG antes do armazenamento privado.
     # O mesmo objeto é referenciado por mensagens de uma turma, sem cópias extras.
@@ -2616,7 +2619,7 @@ def send_admin_message():
         raise
 
     flash(f'Mensagem enviada para {len(student_ids)} aluno(s) com {len(uploaded)} foto(s).', 'success')
-    return redirect(url_for('admin')+'#mensagens')
+    return redirect(url_for('admin_modulos')+'#mensagens')
 
 @app.post('/admin/legenda')
 @admin_required
@@ -2625,7 +2628,7 @@ def add_category():
     import re
     if not name or not re.fullmatch(r'#[0-9a-fA-F]{6}',color):abort(400)
     cur=db().execute('INSERT INTO event_categories(name,color) VALUES(?,?)',(name,color));audit('criar','legenda',cur.lastrowid);db().commit()
-    return redirect(url_for('admin')+'#legendas')
+    return redirect(url_for('admin_modulos')+'#legendas')
 @app.post('/admin/legenda/<int:cid>')
 @admin_required
 def update_category(cid):
@@ -2633,8 +2636,8 @@ def update_category(cid):
     import re
     if not name or not re.fullmatch(r'#[0-9a-fA-F]{6}',color):abort(400)
     db().execute('UPDATE event_categories SET name=?,color=?,active=? WHERE id=?',(name,color,1 if value('active')=='1' else 0,cid));audit('editar','legenda',cid);db().commit()
-    return redirect(url_for('admin')+'#legendas')
+    return redirect(url_for('admin_modulos')+'#legendas')
 @app.errorhandler(PGIntegrityError)
-def integrity(_):db().rollback();flash('Registro duplicado ou dados inválidos.','error');return redirect(url_for('admin'))
+def integrity(_):db().rollback();flash('Registro duplicado ou dados inválidos.','error');return redirect(url_for('admin_modulos'))
 if __name__=='__main__':
     init_db();app.run(debug=os.getenv('FLASK_DEBUG')=='1')
