@@ -2023,6 +2023,16 @@ def admin():
         .replace("X", ".")
     )
 
+    # Fotos das mensagens recentes, disponíveis para edição no painel.
+    admin_message_photos = {}
+    for photo in db().execute(
+        "SELECT p.id,p.message_id,m.student_id FROM message_photos p "
+        "JOIN messages m ON m.id=p.message_id "
+        "WHERE m.id IN (SELECT id FROM messages ORDER BY id DESC LIMIT 300) "
+        "ORDER BY p.id"
+    ).fetchall():
+        admin_message_photos.setdefault(photo['message_id'], []).append(photo)
+
     return render_template(
         'admin.html',
         total_alunos=total_alunos,
@@ -2042,6 +2052,7 @@ def admin():
         boletos_vencidos=boletos_vencidos,
         total_inadimplencia=total_inadimplencia,
 
+        admin_message_photos=admin_message_photos,
         admin_messages=db().execute(
             "SELECT m.id,m.subject,m.body,m.created_at,m.student_id,s.name AS student_name,s.class_name,"
             "(SELECT COUNT(*) FROM message_photos p WHERE p.message_id=m.id) AS photo_count "
