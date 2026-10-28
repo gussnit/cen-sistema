@@ -1313,21 +1313,38 @@ document.addEventListener('DOMContentLoaded', function () {
       <button type="button" class="btn" data-cen-tipo="class" onclick="selecionarTipoMensagemCen('class')">🎓 Por turma</button>
     </div>
     <div id="cen-filtro-aluno"><label for="cen-aluno-historico">Selecionar aluno</label>
-      <select id="cen-aluno-historico" onchange="filtrarMensagensCen()"><option value="">Todos os alunos</option>{% for s in students %}<option value="{{ s.id }}">{{ s.name }} — {{ s.class_name }}</option>{% endfor %}</select>
+      <select id="cen-aluno-historico" onchange="filtrarMensagensCen()"><option value="">Selecione um aluno para visualizar</option>{% for s in students %}<option value="{{ s.id }}">{{ s.name }} — {{ s.class_name }}</option>{% endfor %}</select>
     </div>
     <div id="cen-filtro-turma" hidden><label for="cen-turma-historico">Selecionar turma</label>
-      <select id="cen-turma-historico" onchange="filtrarMensagensCen()"><option value="">Todas as turmas</option>{% for turma in message_classes %}<option value="{{ turma }}">{{ turma }}</option>{% endfor %}</select>
+      <select id="cen-turma-historico" onchange="filtrarMensagensCen()"><option value="">Selecione uma turma para visualizar</option>{% for turma in message_classes %}<option value="{{ turma }}">{{ turma }}</option>{% endfor %}</select>
     </div>
-    <label for="pesquisa-mensagens-cen">🔎 Pesquisar assunto ou destinatário</label>
-    <input id="pesquisa-mensagens-cen" type="search" placeholder="Pesquisar..." oninput="filtrarMensagensCen()">
-    <p class="muted">Exibindo até 300 envios recentes. Mensagens antigas, anteriores ao agrupamento, aparecem como individuais, pois não é seguro inferir seus destinatários originais.</p>
+    <div id="cen-filtro-todos" hidden>
+      <label for="cen-pesquisa-destinatario">🔎 Pesquisar aluno que recebeu a mensagem geral</label>
+      <input id="cen-pesquisa-destinatario" type="search" placeholder="Digite o nome do aluno..." oninput="filtrarMensagensCen()">
+      <small class="muted">A pesquisa verifica os destinatários reais de cada envio para todos os alunos.</small>
+    </div>
+    <div id="cen-alunos-da-turma" class="card" hidden style="margin-top:12px;background:#f5f8ff;">
+      <strong>🎓 Alunos da turma selecionada</strong>
+      <div id="cen-lista-alunos-turma" style="margin-top:8px;"></div>
+    </div>
+    <p class="muted" id="cen-aviso-historico">Exibindo até 300 envios recentes. Mensagens antigas, anteriores ao agrupamento, aparecem como individuais, pois não é seguro inferir seus destinatários originais.</p>
     <p class="muted" id="cen-mensagens-vazio" hidden>Nenhuma mensagem encontrada para este filtro.</p>
     <div id="lista-mensagens-cen">
     {% for m in admin_messages %}
-      <details class="card cen-mensagem-enviada" data-tipo="{{ m.scope }}" data-aluno="{{ m.student_id }}" data-turma="{{ m.batch_class_name or m.class_name }}" data-pesquisa="{{ (m.student_name ~ ' ' ~ m.class_name ~ ' ' ~ m.subject)|lower|e }}">
+      <details class="card cen-mensagem-enviada" data-tipo="{{ m.scope }}" data-aluno="{{ m.student_id }}" data-turma="{{ m.batch_class_name or m.class_name }}" data-destinatarios="{% if m.batch_id and m.scope in ('all', 'class') %}{% for r in message_batch_recipients.get(m.batch_id, []) %}{{ r.name|lower }} {% endfor %}{% else %}{{ m.student_name|lower }}{% endif %}">
         <summary>✉ {{ m.subject }} — {% if m.scope == 'all' %}Toda a escola{% elif m.scope == 'class' %}Turma {{ m.batch_class_name }}{% else %}{{ m.student_name }} ({{ m.class_name }}){% endif %}</summary>
         <p class="muted">📅 {{ m.created_at[:16] }} • 📸 {{ m.photo_count }} foto(s) • 👥 {{ m.recipient_count }} destinatário(s)</p>
         <p style="white-space:pre-wrap">{{ m.body }}</p>
+        {% if m.batch_id and m.scope in ('all', 'class') %}
+        <details style="margin:10px 0;">
+          <summary>👥 Ver destinatários deste envio ({{ m.recipient_count }})</summary>
+          <ul style="margin:8px 0;padding-left:22px;">
+            {% for r in message_batch_recipients.get(m.batch_id, []) %}
+            <li>{{ r.name }} — {{ r.class_name }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+        {% endif %}
         <a class="btn" href="{{ url_for('mensagens',sid=m.student_id) }}#msg-{{ m.id }}" style="display:inline-block;text-decoration:none;margin-bottom:10px;">👁 Ver mensagem e fotos</a>
         <details class="card" style="margin:12px 0;background:#f5f8ff;">
           <summary>✏️ Editar assunto e mensagem</summary>
@@ -1405,34 +1422,67 @@ function validarFotosExtrasCen(form, vagas) {
   return true;
 }
 let tipoMensagemCen = 'student';
+const alunosPorTurmaCen = [
+  {% for s in students %}
+  {nome: {{ s.name|tojson }}, turma: {{ s.class_name|tojson }}}{% if not loop.last %},{% endif %}
+  {% endfor %}
+];
+
 function selecionarTipoMensagemCen(tipo) {
   tipoMensagemCen = tipo;
   document.querySelectorAll('[data-cen-tipo]').forEach(btn => {
     btn.style.opacity = btn.dataset.cenTipo === tipo ? '1' : '0.55';
     btn.setAttribute('aria-pressed', btn.dataset.cenTipo === tipo ? 'true' : 'false');
   });
-  document.getElementById('cen-filtro-aluno').hidden = tipo !== 'student';
-  document.getElementById('cen-filtro-turma').hidden = tipo !== 'class';
-  document.getElementById('cen-filtro-aluno').style.display = tipo === 'student' ? '' : 'none';
-  document.getElementById('cen-filtro-turma').style.display = tipo === 'class' ? '' : 'none';
+  for (const [id, ativo] of [
+    ['cen-filtro-aluno', tipo === 'student'],
+    ['cen-filtro-turma', tipo === 'class'],
+    ['cen-filtro-todos', tipo === 'all']
+  ]) {
+    const bloco = document.getElementById(id);
+    bloco.hidden = !ativo;
+    bloco.style.display = ativo ? '' : 'none';
+  }
   filtrarMensagensCen();
 }
 function filtrarMensagensCen() {
-  const normalizar = x => (x || '').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-  const termo = normalizar(document.getElementById('pesquisa-mensagens-cen').value);
+  const normalizar = x => (x || '').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();
   const aluno = document.getElementById('cen-aluno-historico').value;
   const turma = document.getElementById('cen-turma-historico').value;
+  const buscaGeral = normalizar(document.getElementById('cen-pesquisa-destinatario').value);
+  const listaTurma = document.getElementById('cen-alunos-da-turma');
+  const listaNomes = document.getElementById('cen-lista-alunos-turma');
+  listaTurma.hidden = tipoMensagemCen !== 'class' || !turma;
+  listaTurma.style.display = listaTurma.hidden ? 'none' : '';
+  if (!listaTurma.hidden) {
+    const nomes = alunosPorTurmaCen.filter(s => s.turma === turma);
+    listaNomes.replaceChildren();
+    const titulo = document.createElement('p');
+    titulo.textContent = nomes.length + ' aluno(s) cadastrado(s) nesta turma:';
+    listaNomes.appendChild(titulo);
+    const ul = document.createElement('ul');
+    ul.style.paddingLeft = '22px';
+    nomes.forEach(s => {
+      const li = document.createElement('li');
+      li.textContent = s.nome;
+      ul.appendChild(li);
+    });
+    listaNomes.appendChild(ul);
+  }
   let encontrados = 0;
   document.querySelectorAll('.cen-mensagem-enviada').forEach(item => {
     const corresponde = item.dataset.tipo === tipoMensagemCen &&
-      (tipoMensagemCen !== 'student' || !aluno || item.dataset.aluno === aluno) &&
-      (tipoMensagemCen !== 'class' || !turma || item.dataset.turma === turma) &&
-      (!termo || normalizar(item.dataset.pesquisa).includes(termo));
+      (tipoMensagemCen !== 'student' || (!!aluno && item.dataset.aluno === aluno)) &&
+      (tipoMensagemCen !== 'class' || (!!turma && item.dataset.turma === turma)) &&
+      (tipoMensagemCen !== 'all' || !buscaGeral || normalizar(item.dataset.destinatarios).includes(buscaGeral));
     item.hidden = !corresponde;
     item.style.display = corresponde ? '' : 'none';
     if (corresponde) encontrados++;
   });
-  document.getElementById('cen-mensagens-vazio').hidden = encontrados !== 0;
+  const aguardando = (tipoMensagemCen === 'student' && !aluno) || (tipoMensagemCen === 'class' && !turma);
+  const vazio = document.getElementById('cen-mensagens-vazio');
+  vazio.hidden = aguardando || encontrados !== 0;
+  document.getElementById('cen-aviso-historico').hidden = aguardando;
 }
 document.addEventListener('DOMContentLoaded', function () {
   selecionarTipoMensagemCen('student');
