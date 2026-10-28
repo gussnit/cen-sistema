@@ -1,0 +1,574 @@
+{% extends 'base.html' %}{% block content %}<h1>⚙ Administração</h1>
+<p class="muted">Gestão dos alunos, responsáveis e informações escolares.</p>
+
+{% if is_superadmin %}
+<div style="text-align:center; margin:18px 0;">
+    <a href="{{ url_for('listar_administradores') }}"
+       class="btn"
+       style="display:inline-block; text-decoration:none;">
+        👥 Gerenciar Administradores
+    </a>
+    
+    <a href="{{ url_for('minha_conta_admin') }}" class="btn">
+       🔐 Gerenciar Credenciais
+    </a>
+
+</div>
+{% endif %}
+
+<!-- BOTÃO HISTÓRICO DE ALTERAÇÕES -->
+<div style="text-align:center; margin:18px 0;">
+    <a
+        href="{{ url_for('historico_alteracoes') }}"
+        class="btn"
+        style="display:inline-block; text-decoration:none;"
+    >
+        📋 Histórico de Alterações Administrativas
+    </a>
+</div>
+<!-- FIM DO BOTÃO -->
+<div style="text-align:center;margin:16px 0 22px;">
+  <a class="btn" href="{{ url_for('admin_modulos') }}" style="display:inline-block;text-decoration:none;">
+    ⚙ Módulos administrativos
+  </a>
+</div>
+
+<style>
+.admin-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin: 20px 0;
+}
+
+.admin-tab {
+    border: 1px solid #d6def0;
+    border-radius: 12px;
+    background: white;
+    padding: 13px 5px;
+    color: #344b9b;
+    font: inherit;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    text-align: center;
+}
+
+.admin-tab span {
+    display: block;
+    font-size: 24px;
+    margin-bottom: 5px;
+}
+
+.admin-tab.active {
+    background: #344b9b;
+    color: white;
+}
+
+.admin-panel {
+    display: none;
+}
+
+.admin-panel.active {
+    display: block;
+}
+
+@media (max-width: 420px) {
+    .admin-tabs {
+        gap: 6px;
+    }
+
+    .admin-tab {
+        font-size: 11px;
+        padding: 10px 3px;
+    }
+}
+</style>
+
+<!-- PAINEL DE INDICADORES CEN -->
+<style>
+
+.cen-dashboard {
+    margin: 20px 0 28px;
+    width: 100%;
+    display: block;
+    clear: both;
+}
+
+.cen-dashboard h2 {
+    display: block;
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.cen-dashboard .cen-indicators {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 15px;
+    width: 100%;
+}
+
+
+.cen-dashboard .cen-indicator {
+    min-width: 0;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.cen-dashboard .cen-indicator-icon,
+.cen-dashboard .cen-indicator-number,
+.cen-dashboard .cen-indicator-label {
+    text-align: center;
+}
+
+@media (max-width: 850px) {
+    .cen-dashboard .cen-indicators {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 380px) {
+    .cen-dashboard .cen-indicators {
+        grid-template-columns: 1fr;
+    }
+}
+
+.cen-indicator-icon {
+    font-size: 28px;
+    margin-bottom: 12px;
+}
+
+.cen-indicator-number {
+    font-size: 32px;
+    font-weight: 800;
+    color: #243b64;
+}
+
+.cen-indicator-label {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 5px;
+}
+
+</style>
+
+<section class="cen-dashboard">
+    <h2>📊 Visão geral do CEN</h2>
+
+    <div class="cen-indicators">
+
+        <div class="cen-indicator">
+            <div class="cen-indicator-icon">🎓</div>
+            <div class="cen-indicator-number">
+                {{ total_alunos }}
+            </div>
+            <div class="cen-indicator-label">
+                Total de alunos
+            </div>
+        </div>
+
+        <div class="cen-indicator">
+            <div class="cen-indicator-icon">👥</div>
+            <div class="cen-indicator-number">
+                {{ total_responsaveis }}
+            </div>
+            <div class="cen-indicator-label">
+                Responsáveis cadastrados
+            </div>
+        </div>
+
+        <div class="cen-indicator">
+            <div class="cen-indicator-icon">✅</div>
+            <div class="cen-indicator-number">
+                {{ alunos_ativos }}
+            </div>
+            <div class="cen-indicator-label">
+                Alunos ativos
+            </div>
+        </div>
+
+        <div class="cen-indicator">
+            <div class="cen-indicator-icon">📋</div>
+            <div class="cen-indicator-number">
+                {{ alunos_inativos }}
+            </div>
+            <div class="cen-indicator-label">
+                Alunos inativos
+            </div>
+        </div>
+
+    </div>
+</section>
+<!-- FIM DO PAINEL -->
+
+<!-- PAINEL FINANCEIRO CEN -->
+<style>
+.cen-financeiro {
+    margin: 24px 0;
+}
+
+.cen-financeiro-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.cen-financeiro-card {
+    background: #fff;
+    border: 1px solid #d6def0;
+    border-radius: 15px;
+    padding: 15px 8px;
+    text-align: center;
+    cursor: pointer;
+    font: inherit;
+    color: #243b64;
+    min-width: 0;
+}
+
+.cen-financeiro-card:hover,
+.cen-financeiro-card.ativo {
+    background: #edf3ff;
+    border-color: #344b9b;
+}
+
+.cen-financeiro-card .icone {
+    display: block;
+    font-size: 25px;
+}
+
+.cen-financeiro-card .numero {
+    display: block;
+    font-size: 28px;
+    font-weight: 800;
+    margin: 8px 0;
+}
+
+.cen-financeiro-card .descricao {
+    display: block;
+    font-size: 12px;
+}
+
+.cen-financeiro-lista {
+    margin-top: 15px;
+}
+
+.cen-financeiro-item {
+    background: #fff;
+    border: 1px solid #d6def0;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
+}
+
+.cen-financeiro-item p {
+    margin: 5px 0;
+}
+
+@media (max-width: 700px) {
+    .cen-financeiro-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+</style>
+
+<section class="cen-financeiro">
+    <h2>💰 Painel financeiro</h2>
+
+<!-- FILTROS FINANCEIROS -->
+<style>
+.cen-filtros-financeiros {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 12px;
+    margin: 18px 0 22px;
+    padding: 16px;
+    background: #f5f8ff;
+    border: 1px solid #d6def0;
+    border-radius: 14px;
+}
+
+.cen-filtro-campo {
+    flex: 1 1 150px;
+    min-width: 0;
+}
+
+.cen-filtro-campo label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.cen-filtro-campo select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #d6def0;
+    border-radius: 9px;
+    background: white;
+    font: inherit;
+}
+
+.cen-filtro-botao {
+    padding: 11px 20px;
+    background: #344b9b;
+    color: white;
+    border: none;
+    border-radius: 9px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+@media (max-width: 500px) {
+    .cen-filtro-botao {
+        width: 100%;
+    }
+}
+</style>
+
+<form method="get"
+      action="{{ url_for('admin') }}"
+      class="cen-filtros-financeiros">
+
+    <div class="cen-filtro-campo">
+        <label for="mes-financeiro">📅 Mês</label>
+        <select id="mes-financeiro" name="mes">
+            <option value="">Todos os meses</option>
+
+            {% for numero, nome in meses_financeiros %}
+            <option value="{{ numero }}"
+                {% if mes_selecionado == numero %}selected{% endif %}>
+                {{ nome }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="cen-filtro-campo">
+        <label for="ano-financeiro">📆 Ano</label>
+        <select id="ano-financeiro" name="ano">
+            <option value="">Todos os anos</option>
+
+            {% for ano in anos_financeiros %}
+            <option value="{{ ano }}"
+                {% if ano_selecionado == ano %}selected{% endif %}>
+                {{ ano }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <button type="submit" class="cen-filtro-botao">
+        🔎 Filtrar
+    </button>
+</form>
+<!-- FIM DOS FILTROS FINANCEIROS -->
+
+
+<!-- BOTÕES DE RELATÓRIOS FINANCEIROS -->
+<div style="
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0 0 22px;
+">
+    <a
+        href="{{ url_for('relatorio_financeiro_pdf', mes=mes_selecionado or '', ano=ano_selecionado or '') }}"
+        class="cen-filtro-botao"
+        style="display:inline-block; text-decoration:none;"
+    >
+        📄 Exportar relatório de inadimplência
+    </a>
+
+    <a
+        href="{{ url_for('relatorio_financeiro_completo_pdf', mes=mes_selecionado or '', ano=ano_selecionado or '') }}"
+        class="cen-filtro-botao"
+        style="display:inline-block; text-decoration:none;"
+    >
+        📊 Exportar relatório financeiro completo
+    </a>
+</div>
+<!-- FIM DOS BOTÕES DE RELATÓRIOS -->
+
+
+<!-- TOTAL DA INADIMPLÊNCIA -->
+<div class="cen-total-atraso">
+    <div class="cen-total-atraso-icone">💰</div>
+
+    <div class="cen-total-atraso-info">
+        <span class="cen-total-atraso-titulo">
+            Total em atraso
+        </span>
+
+        <strong class="cen-total-atraso-valor">
+            R$ {{ total_inadimplencia }}
+        </strong>
+
+        <span class="cen-total-atraso-detalhe">
+            {{ boletos_vencidos|length }} boleto(s) vencido(s)
+        </span>
+    </div>
+</div>
+
+<style>
+.cen-total-atraso {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 22px;
+    margin: 16px 0 22px;
+    background: #fff5f5;
+    border: 1px solid #f2caca;
+    border-radius: 16px;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.cen-total-atraso-icone {
+    font-size: 38px;
+}
+
+.cen-total-atraso-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    text-align: center;
+}
+
+.cen-total-atraso-titulo {
+    color: #9f3535;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.cen-total-atraso-valor {
+    color: #a52a2a;
+    font-size: clamp(25px, 5vw, 38px);
+    font-weight: 800;
+}
+
+.cen-total-atraso-detalhe {
+    color: #805454;
+    font-size: 12px;
+}
+</style>
+<!-- FIM DO TOTAL DA INADIMPLÊNCIA -->
+
+    <div class="cen-financeiro-grid">
+        <button type="button" class="cen-financeiro-card"
+                onclick="mostrarBoletos('todos', this)">
+            <span class="icone">📋</span>
+            <span class="numero">{{ pagamentos_filtrados|length }}</span>
+            <span class="descricao">Total de boletos</span>
+        </button>
+
+        <button type="button" class="cen-financeiro-card"
+                onclick="mostrarBoletos('pagos', this)">
+            <span class="icone">✅</span>
+            <span class="numero">{{ boletos_pagos|length }}</span>
+            <span class="descricao">Pagos</span>
+        </button>
+
+        <button type="button" class="cen-financeiro-card"
+                onclick="mostrarBoletos('pendentes', this)">
+            <span class="icone">🕒</span>
+            <span class="numero">{{ boletos_pendentes|length }}</span>
+            <span class="descricao">Pendentes</span>
+        </button>
+
+        <button type="button" class="cen-financeiro-card"
+                onclick="mostrarBoletos('vencidos', this)">
+            <span class="icone">🔴</span>
+            <span class="numero">{{ boletos_vencidos|length }}</span>
+            <span class="descricao">Vencidos</span>
+        </button>
+    </div>
+
+    <div id="cen-financeiro-resultados"
+         class="cen-financeiro-lista"
+         hidden>
+
+        
+{% for tipo, lista in [
+    ('todos', pagamentos_filtrados),
+    ('pagos', boletos_pagos),
+    ('pendentes', boletos_pendentes),
+    ('vencidos', boletos_vencidos)
+] %}
+
+
+        <div data-financeiro-grupo="{{ tipo }}" hidden>
+            <h3>
+                {% if tipo == 'vencidos' %}
+                    🔴 Boletos vencidos — alunos inadimplentes
+                {% elif tipo == 'pagos' %}
+                    ✅ Boletos pagos
+                {% elif tipo == 'pendentes' %}
+                    🕒 Boletos pendentes
+                {% else %}
+                    📋 Todos os boletos
+                {% endif %}
+            </h3>
+
+            {% for p in lista %}
+            <div class="cen-financeiro-item">
+                <p><strong>🎓 {{ p.aluno_nome }}</strong></p>
+                <p>Turma: {{ p.aluno_turma }}</p>
+                <p>Descrição: {{ p.title }}</p>
+                <p>Vencimento: {{ p.due_date }}</p>
+                <p>
+                    Valor:
+                    <strong>
+                        R$ {{ '%.2f'|format(p.amount_cents / 100) }}
+                    </strong>
+                </p>
+                <p>Status registrado: {{ p.status }}</p>
+            </div>
+            {% else %}
+            <p class="muted">Nenhum boleto nesta categoria.</p>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<script>
+function mostrarBoletos(tipo, botao) {
+    const resultados = document.getElementById(
+        'cen-financeiro-resultados'
+    );
+
+    const estavaAtivo = botao.classList.contains('ativo');
+
+    document.querySelectorAll('.cen-financeiro-card')
+        .forEach(card => card.classList.remove('ativo'));
+
+    document.querySelectorAll('[data-financeiro-grupo]')
+        .forEach(grupo => {
+            grupo.hidden = true;
+            grupo.style.display = 'none';
+        });
+
+    if (estavaAtivo) {
+        resultados.hidden = true;
+        return;
+    }
+
+    botao.classList.add('ativo');
+
+    const grupo = document.querySelector(
+        '[data-financeiro-grupo="' + tipo + '"]'
+    );
+
+    if (grupo) {
+        resultados.hidden = false;
+        grupo.hidden = false;
+        grupo.style.display = 'block';
+    }
+}
+</script>
+<!-- FIM DO PAINEL FINANCEIRO -->
+{% endblock %}
