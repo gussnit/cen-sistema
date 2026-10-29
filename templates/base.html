@@ -1,0 +1,79 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#344b9b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Portal CEN"><link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}"><link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/cen-180.png') }}"><title>CEN | Portal Escolar</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css',v='78-2') }}"><style>
+/* Jost: fonte aberta sob SIL OFL; fallback geometrico se offline */
+@import url("https://fonts.googleapis.com/css2?family=Jost:wght@500&display=swap");
+.brand .cen-school-name{font-family:"Jost","Century Gothic","Trebuchet MS",Arial,sans-serif;font-weight:500;letter-spacing:.01em;}
+.cen-student-back{display:inline-flex;align-items:center;gap:5px;background:#344d9e;color:#fff!important;text-decoration:none;border-radius:7px;padding:8px 11px;font-size:12px;font-weight:600;margin:0 0 10px;}
+.cen-student-back:hover{background:#263e8a;}
+@media print{.cen-student-back{display:none!important;}}
+
+/* Navegacao consistente entre os tres modulos do mesmo aluno */
+.cen-student-module-nav{margin:10px 0 22px;}
+.cen-student-module-nav a[aria-current="page"]{border-color:#344d9e;box-shadow:inset 0 0 0 1px #344d9e;}
+@media print{.cen-student-module-nav{display:none!important;}}
+/* Barra inferior com seis atalhos no portal do responsável */
+.nav-aluno { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; }
+.nav-aluno a, .nav-aluno .nav-indisponivel { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 21px; text-decoration: none; padding: 9px 1px; }
+.nav-aluno small { font-size: clamp(8px, 2.15vw, 11px); line-height: 1.25; white-space: nowrap; }
+.nav-aluno .nav-indisponivel { opacity: .4; }
+.cen-dashboard{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,40%);gap:20px;align-items:center}.cen-student{display:flex;align-items:center;gap:16px;min-width:0}.cen-photo{width:96px;height:110px;object-fit:cover;border-radius:12px;flex-shrink:0}.cen-placeholder{background:#edf5ff;display:flex;align-items:center;justify-content:center;border-radius:12px;color:#567}.cen-card img{width:100%;border-radius:10px;display:block}.cen-banner{width:100%;height:auto;border-radius:12px;display:block}@media(max-width:560px){.cen-dashboard{grid-template-columns:1fr}.cen-photo{width:75px;height:90px}.cen-student h2{font-size:1.2rem}}
+
+.cen-push-panel{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#fff;border:1px solid #b5d0f7;border-radius:12px;padding:12px 14px;margin:10px 0 15px;color:#273e71}
+.cen-push-panel p{font-size:12px;margin:4px 0 0;color:#526781}
+.cen-push-panel button{border:0;border-radius:8px;background:#344d9e;color:white;padding:10px 12px;cursor:pointer;font-weight:600}
+@media print{.cen-push-panel{display:none!important}}
+
+.cen-push-panel{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#fff;border:1px solid #b5d0f7;border-radius:12px;padding:12px 14px;margin:10px 0 15px;color:#273e71}
+.cen-push-panel p{font-size:12px;margin:4px 0 0;color:#526781}
+.cen-push-panel button{border:0;border-radius:8px;background:#344d9e;color:white;padding:10px 12px;cursor:pointer;font-weight:600}
+@media print{.cen-push-panel{display:none!important}}
+</style></head><body><main class="app"><header class="top"><a class="brand" href="{{url_for('home')}}"><img class="logo-image" src="{{ url_for('static',filename='logo-cen.png') }}" alt="Logotipo oficial do Centro Educacional de Niterói"><span class="cen-school-name">CENTRO EDUCACIONAL<br>DE NITERÓI</span></a>{% if me %}<form action="{{url_for('logout')}}" method="post"><input type="hidden" name="csrf_token" value="{{csrf_token()}}"><button class="plain">Sair ↗</button></form>{% endif %}</header>{% with msgs=get_flashed_messages(with_categories=true) %}{% for kind,msg in msgs %}<div class="alert">{{msg}}</div>{% endfor %}{% endwith %}{% if me and me.role == 'responsavel' %}
+<section class="cen-push-panel" aria-label="Notificações do CEN">
+  <div><strong>🔔 Notificações do CEN</strong><p id="cen-push-status" role="status">Verificando disponibilidade...</p></div>
+  <button type="button" id="cen-push-button" hidden>Ativar notificações</button>
+</section>
+{% endif %}
+{% if me and me.role == 'responsavel' %}
+<section class="cen-push-panel" aria-label="Notificações do CEN">
+  <div><strong>🔔 Notificações do CEN</strong><p id="cen-push-status" role="status">Verificando disponibilidade...</p></div>
+  <button type="button" id="cen-push-button" hidden>Ativar notificações</button>
+</section>
+{% endif %}
+{% block content %}{% endblock %}{% if me %}
+{% if me.role == 'responsavel' %}
+  {% set nav_alunos = nav_students %}
+  {% set nav_aluno = s if s is defined else ((nav_alunos|selectattr('id','equalto',selected_student_id)|first|default(none)) or (nav_alunos[0] if nav_alunos else none)) %}
+  <nav class="nav nav-aluno" aria-label="Navegação do portal do aluno">
+    <a href="{{ url_for('home') }}" aria-label="Início"><span aria-hidden="true">⌂</span><small>Início</small></a>
+    {% if nav_aluno %}
+    <a href="{{ url_for('boletim', sid=nav_aluno.id) }}" aria-label="Boletim"><span aria-hidden="true">📊</span><small>Boletim</small></a>
+    <a href="{{ url_for('financeiro', sid=nav_aluno.id) }}" aria-label="Financeiro"><span aria-hidden="true">💳</span><small>Financeiro</small></a>
+    <a href="{{ url_for('mensagens', sid=nav_aluno.id) }}" aria-label="Mensagens"><span aria-hidden="true">✉</span><small>Mensagem{% if unread_count %} ({{unread_count}}){% endif %}</small></a>
+    {% else %}
+    <span class="nav-indisponivel" title="Nenhum aluno vinculado">📊<small>Boletim</small></span>
+    <span class="nav-indisponivel" title="Nenhum aluno vinculado">💳<small>Financeiro</small></span>
+    <span class="nav-indisponivel" title="Nenhum aluno vinculado">✉<small>Mensagem</small></span>
+    {% endif %}
+    <a href="{{ url_for('calendario') }}" aria-label="Calendário"><span aria-hidden="true">▦</span><small>Calendário</small></a>
+    <a href="{{ url_for('comunicados') }}" aria-label="Comunicados"><span aria-hidden="true">♧</span><small>Comunicados</small></a>
+  </nav>
+{% else %}
+  <nav class="nav" aria-label="Navegação administrativa">
+    <a href="{{ url_for('admin') }}">⌂<small>Início</small></a>
+    <a href="{{ url_for('admin_modulos') }}">⚙<small>Admin</small></a>
+  </nav>
+{% endif %}
+{% endif %}</main><script>
+// Passo 78.1: instala somente a estrutura PWA; notificações serão ativadas em etapa posterior.
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js', {scope: '/'}).catch(function (err) {
+      console.warn('PWA CEN: service worker indisponível', err);
+    });
+  });
+}
+</script>
+{% if me and me.role == 'responsavel' %}
+<script src="{{ url_for('static', filename='push-settings.js', v='78-2') }}" defer></script>
+<meta name="cen-csrf" content="{{ csrf_token() }}">
+{% endif %}
+</body></html>
