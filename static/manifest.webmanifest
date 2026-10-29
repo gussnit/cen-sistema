@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Portal CEN — Centro Educacional de Niterói",
+  "short_name": "Portal CEN",
+  "description": "Portal escolar do Centro Educacional de Niterói",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fafdff",
+  "theme_color": "#344b9b",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/static/icons/cen-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icons/cen-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
