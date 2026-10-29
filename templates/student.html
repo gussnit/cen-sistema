@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+/* Passo 75: identidade visual azul e branca; rotas e formulários preservados. */
+.cen-student-media,
+.cen-student-messages {
+  border: 1.5px solid #83baff;
+  border-radius: 17px;
+  background: #fff;
+  padding: 18px;
+  box-shadow: 0 8px 22px rgba(33, 91, 166, .07);
+}
+.cen-student-media > h2,
+.cen-student-messages > h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  color: #123b8b;
+}
+.cen-student-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #e2f2ff;
+  color: #1263c4;
+  font-size: 21px;
+  line-height: 1;
+}
+.cen-student-media-inner {
+  border: 1px solid #a3caff;
+  border-radius: 13px;
+  background: #fff;
+  padding: 15px;
+  margin-top: 14px;
+}
+.cen-student-media-inner > form { margin: 0; }
+.cen-student-media-inner label { display: block; }
+.cen-student-messages {
+  margin-top: 0;
+}
+.cen-student-messages > .card {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+/* A cor de .mine do tema não deve prevalecer sobre os cartões brancos. */
+.cen-student-messages .bubble,
+.cen-student-messages .bubble.mine {
+  background: #fff;
+  border: 1px solid #94c5ff;
+  border-radius: 13px;
+  color: #16345b;
+  box-shadow: none;
+  margin: 0 0 9px;
+  padding: 14px;
+}
+.cen-student-messages .bubble:last-child { margin-bottom: 0; }
+.cen-student-messages .bubble small { color: #687f9e; }
+
+
+@media (max-width: 480px) {
+  .cen-student-media, .cen-student-messages { padding: 12px; }
+  .cen-student-media-inner { padding: 12px; }
+  
+}
+</style>
+<a class="cen-student-back" href="{{ url_for('admin_modulos') if me.role == 'admin' else url_for('home') }}">⌂ Voltar aos alunos</a>
+<h1>{{ s.name }}</h1>
+<p class="muted">{{ s.grade_level }} • {{ s.class_name }} • Matrícula {{ s.registration }}</p>
+<div class="tiles">
+  <a href="{{ url_for('boletim', sid=s.id) }}">📊<small>Boletim</small></a>
+  <a href="{{ url_for('financeiro', sid=s.id) }}">💳<small>Financeiro</small></a>
+  <a href="{{ url_for('mensagens', sid=s.id) }}">✉<small>Mensagens</small></a>
+</div>
+{% if me.role == 'admin' %}
+<details class="card">
+  <summary>✏ Editar dados do aluno</summary>
+  <form method="post" action="{{ url_for('update_student', sid=s.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Nome<input name="name" value="{{ s.name }}" required></label>
+    <label>Matrícula<input name="registration" value="{{ s.registration }}" required></label>
+    <label>Etapa<input name="grade_level" value="{{ s.grade_level }}" required></label>
+    <label>Turma<input name="class_name" value="{{ s.class_name }}" required></label>
+    <label>Status<select name="active"><option value="1" {% if s.active %}selected{% endif %}>Ativo</option><option value="0" {% if not s.active %}selected{% endif %}>Inativo</option></select></label>
+    <button class="btn">Salvar dados</button>
+  </form>
+</details>
+{% endif %}
+
+{% if me.role == 'admin' %}
+<section class="card cen-student-media">
+  <h2><span class="cen-student-title-icon" aria-hidden="true">▣</span>Foto e carteirinha digital</h2>
+  <div class="cen-student-media-inner">
+    <form method="post" action="{{ url_for('upload_student_photo', sid=s.id) }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Foto do aluno (JPG, PNG ou WEBP)<input type="file" name="file" accept="image/jpeg,image/png,image/webp" required></label>
+      <button class="btn">Enviar foto</button>
+    </form>
+  </div>
+  <div class="cen-student-media-inner">
+    <form method="post" action="{{ url_for('upload_student_card', sid=s.id) }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Carteirinha personalizada em PDF<input type="file" name="file" accept="application/pdf" required></label>
+      <button class="btn">Enviar carteirinha</button>
+    </form>
+  </div>
+</section>
+
+{% endif %}
+<section id="mensagens" class="cen-student-messages">
+  <h2><span class="cen-student-title-icon" aria-hidden="true">➤</span>Mensagens</h2>
+  <div class="card">
+    {% for m in messages %}
+    <div class="bubble {% if m.sender_id == me.id %}mine{% endif %}">
+      <b>{{ m.sender }}</b><p>{{ m.body }}</p><small>{{ m.created_at }}</small>
+    </div>
+    {% else %}
+    <p>Nenhuma mensagem ainda.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
