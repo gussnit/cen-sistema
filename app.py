@@ -2787,7 +2787,7 @@ def update_category(cid):
 # Nao dispara notificacoes automaticas nem envia para outros usuarios.
 @app.route('/admin/push-test', methods=['GET', 'POST'])
 @superadmin_required
-@limiter.limit('3 per hour', methods=['POST'])
+@limiter.limit('20 per hour', methods=['POST'])
 def cen_push_test():
     from flask import render_template_string
     import json
